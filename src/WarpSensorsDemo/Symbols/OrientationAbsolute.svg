@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <title>Absolute orientation</title><desc>North-referenced three-dimensional orientation.</desc>
+  <path d="M12 3 8 11l4-2 4 2Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+  <ellipse cx="12" cy="14" rx="8" ry="5" fill="none" stroke="currentColor" stroke-width="1.5"/>
+  <path d="M12 19v3M12 2V0" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+</svg>

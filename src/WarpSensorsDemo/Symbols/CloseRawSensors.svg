@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <title>Close raw sensor diagnostics</title>
+  <desc>Closes the window showing live raw sensor streams.</desc>
+  <circle cx="8" cy="12" r="2.3" fill="none" stroke="currentColor" stroke-width="1.7"/>
+  <path d="M4.8 8.8a4.5 4.5 0 0 0 0 6.4M2.7 6.7a7.5 7.5 0 0 0 0 10.6M11.2 8.8a4.5 4.5 0 0 1 1.1 1.7" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="m15 9 6 6m0-6-6 6" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/>
+</svg>

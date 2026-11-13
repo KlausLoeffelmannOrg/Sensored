@@ -1,0 +1,55 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net11.0-windows10.0.22000.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+
+    <!--
+      Single-project MSIX packaging. dotnet build still produces the plain WinForms exe (the
+      AppxPackage targets are only imported under Visual Studio MSBuild); the .msix package is
+      produced by VS MSBuild via /t:Publish. Package identity is required for the WinRT
+      consent-gated capabilities declared in Package.appxmanifest (location, radios, microphone)
+      to be granted at runtime.
+    -->
+    <EnableMsixTooling>true</EnableMsixTooling>
+    <WindowsPackageType>MSIX</WindowsPackageType>
+    <Platforms>AnyCPU;x64;arm64</Platforms>
+    <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
+    <GenerateAppxPackageOnBuild>false</GenerateAppxPackageOnBuild>
+    <AppxPackageSigningEnabled>false</AppxPackageSigningEnabled>
+    <StartupObject>WarpSensorsDemo.Program</StartupObject>
+    <AnalysisLevel>latest-recommended</AnalysisLevel>
+    <WarpToolkitVersion>0.9.491-preview.g9be8b31731</WarpToolkitVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="WarpToolkit.Sensors.Abstractions" Version="$(WarpToolkitVersion)" />
+    <PackageReference Include="WarpToolkit.Sensors" Version="$(WarpToolkitVersion)" />
+    <PackageReference Include="WarpToolkit.Sensors.Presentation" Version="$(WarpToolkitVersion)" />
+    <PackageReference Include="WarpToolkit.Windows.Sensors" Version="$(WarpToolkitVersion)" />
+    <PackageReference Include="WarpToolkit.WinForms.Sensors.DirectX" Version="$(WarpToolkitVersion)" />
+    <PackageReference Include="WarpToolkit.WinForms" Version="$(WarpToolkitVersion)" />
+    <PackageReference Include="WarpToolkit.WinForms.Extensions" Version="$(WarpToolkitVersion)" />
+    <PackageReference Include="WarpToolkit.WinForms.AppServices" Version="$(WarpToolkitVersion)" />
+    <PackageReference Include="WarpToolkit.ComponentModel" Version="$(WarpToolkitVersion)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="WarpToolkit.Sensors" />
+    <Using Include="WarpToolkit.Sensors.Presentation" />
+    <Using Include="WarpToolkit.Windows.Sensors" />
+    <Using Include="WarpToolkit.WinForms.Controls" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <AppxManifest Include="Package.appxmanifest">
+      <SubType>Designer</SubType>
+    </AppxManifest>
+    <Content Include="Images\**\*.png" />
+    <EmbeddedResource Include="Symbols\**\*.svg" />
+  </ItemGroup>
+
+</Project>

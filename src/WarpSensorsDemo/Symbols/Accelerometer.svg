@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <title>Standard accelerometer</title><desc>Acceleration along three axes, including gravity.</desc>
+  <circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.8"/>
+  <path d="M12 2v7m0 6v7M2 12h7m6 0h7M4.9 4.9l5 5m4.2 4.2 5 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+  <path d="m12 2-2 3m2-3 2 3M22 12l-3-2m3 2-3 2" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+</svg>

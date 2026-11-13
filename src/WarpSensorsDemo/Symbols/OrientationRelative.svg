@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <title>Relative orientation</title><desc>Smooth orientation relative to the starting pose.</desc>
+  <path d="M5 17a8 8 0 1 1 14-2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+  <path d="m19 10 .2 5-5-.4M12 7v5l4 2" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

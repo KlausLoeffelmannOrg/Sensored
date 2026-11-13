@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <title>Recording options</title><desc>Configures the recording folder and output file formats.</desc>
+  <path d="M3 6h7l2 2h9v11H3Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+  <circle cx="9" cy="14" r="2.5" fill="currentColor"/>
+  <path d="M14 12h4m-4 3h4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+</svg>

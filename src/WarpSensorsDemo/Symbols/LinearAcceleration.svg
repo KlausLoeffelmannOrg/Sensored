@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <title>Linear acceleration</title><desc>Acceleration with gravity removed.</desc>
+  <path d="M3 12h15M14 7l5 5-5 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M4 7v10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+</svg>

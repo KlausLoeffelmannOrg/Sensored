@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <title>Start raw sensor recording</title>
+  <desc>Begins recording the live raw sensor streams.</desc>
+  <circle cx="9" cy="12" r="5" fill="none" stroke="currentColor" stroke-width="1.8"/>
+  <circle cx="9" cy="12" r="2.5" fill="currentColor"/>
+  <path d="M15.5 8.5 21 12l-5.5 3.5Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+</svg>
