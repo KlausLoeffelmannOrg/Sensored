@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <title>Recording page</title>
+  <desc>Recording status, row counts, and output path.</desc>
+  <g fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M14.5 3.2H6c-1.1 0-1.8.8-1.8 1.8v14c0 1 .7 1.8 1.8 1.8h12c1 0 1.8-.8 1.8-1.8V8.5Z"/>
+    <path d="M14.5 3.2v3.8c0 .9.6 1.5 1.5 1.5h3.8M7.3 14h9.4m-9.4 3.4h6.2" stroke-width=".95"/>
+    <circle cx="8.8" cy="9.2" r="1.7" fill="currentColor" stroke="none"/>
+  </g>
+</svg>

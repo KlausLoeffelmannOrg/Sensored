@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net11.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="WarpSensorsDataProcessor.Tests" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(UsePackageDependency)' == 'false'">
+    <ProjectReference Include="$(WarpRoot)src\WarpToolkit.Sensors.Abstractions\WarpToolkit.Sensors.Abstractions.csproj" />
+    <ProjectReference Include="$(WarpRoot)src\WarpToolkit.Sensors\WarpToolkit.Sensors.csproj" />
+    <ProjectReference Include="$(WarpRoot)src\WarpToolkit.Sensors.Fusion\WarpToolkit.Sensors.Fusion.csproj" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(UsePackageDependency)' == 'true'">
+    <PackageReference Include="WarpToolkit.Sensors.Abstractions" Version="$(WarpPackageVersion)" />
+    <PackageReference Include="WarpToolkit.Sensors" Version="$(WarpPackageVersion)" />
+    <PackageReference Include="WarpToolkit.Sensors.Fusion" Version="$(WarpPackageVersion)" />
+  </ItemGroup>
+
+</Project>

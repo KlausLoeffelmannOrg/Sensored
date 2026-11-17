@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <title>Forward thirty seconds</title>
+  <desc>Moves forward thirty seconds of recording time.</desc>
+  <g fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round">
+    <path d="m4 5.2 7.1 6.1c.5.4.5 1 0 1.4L4 18.8"/>
+    <path d="m12.5 5.2 7.1 6.1c.5.4.5 1 0 1.4l-7.1 6.1"/>
+  </g>
+</svg>

@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Package
+  xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+  xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+  IgnorableNamespaces="uap rescap">
+
+  <Identity
+    Name="KlausLoeffelmannOrg.Sensored"
+    Publisher="CN=WARP Development"
+    Version="1.0.0.0" />
+
+  <Properties>
+    <DisplayName>Sensored</DisplayName>
+    <PublisherDisplayName>KlausLoeffelmannOrg</PublisherDisplayName>
+    <Logo>Images\StoreLogo.png</Logo>
+  </Properties>
+
+  <Dependencies>
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.17763.0" MaxVersionTested="10.0.22621.0" />
+  </Dependencies>
+
+  <Resources>
+    <Resource Language="x-generate" />
+  </Resources>
+
+  <Applications>
+    <Application
+      Id="App"
+      Executable="$targetnametoken$.exe"
+      EntryPoint="$targetentrypoint$">
+      <uap:VisualElements
+        DisplayName="Sensored"
+        Description="Driving dashboard with vehicle fusion, GPS maps, recording and replay."
+        BackgroundColor="transparent"
+        Square150x150Logo="Images\Square150x150Logo.png"
+        Square44x44Logo="Images\Square44x44Logo.png">
+        <uap:DefaultTile Wide310x150Logo="Images\Wide310x150Logo.png" />
+        <uap:SplashScreen Image="Images\SplashScreen.png" />
+      </uap:VisualElements>
+    </Application>
+  </Applications>
+
+  <Capabilities>
+    <!--
+      Capability audit for Sensored. Declare every WinRT-consent-gated feature the app
+      uses so RequestAccessAsync returns Allowed under package identity:
+        * location     - Windows.Devices.Geolocation (GPS / satellite positioning).
+        * microphone   - Windows.Media.SpeechRecognition (voice / speech recognition).
+        * bluetooth    - paired OBDLink CX BLE GATT transport.
+        * internetClient - online speech recognition endpoints.
+      NOTE: The motion/orientation sensors used by WarpToolkit.WinForms.Sensors
+      (Accelerometer, Gyrometer, Inclinometer, and Compass/OrientationSensor via
+      Windows.Devices.Sensors) require NO capability on Windows and are intentionally
+      not declared here. The radios capability was removed with the WiFi-kick GPS warm-up:
+      the demo now configures the Windows GPS source with allow-all sources and no WiFi kick,
+      so Windows.Devices.Radios is no longer used.
+    -->
+    <Capability Name="internetClient" />
+    <DeviceCapability Name="location" />
+    <DeviceCapability Name="microphone" />
+    <DeviceCapability Name="bluetooth" />
+  </Capabilities>
+</Package>

@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <title>Windows GPS</title>
+  <desc>Uses the Windows Location position source.</desc>
+  <g fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 21c-1.7-1.8-6-6.8-6-11.9a6 6 0 0 1 12 0c0 5.1-4.3 10.1-6 11.9Z"/>
+    <circle cx="12" cy="9" r="2.15"/>
+    <path d="M3.2 7.2c.4-1.9 1.4-3.5 2.8-4.7m14.8 4.7c-.4-1.9-1.4-3.5-2.8-4.7" stroke-width=".9"/>
+    <path d="M7.8 20.7c2.4.8 6 .8 8.4 0" stroke-width=".85" opacity=".65"/>
+  </g>
+</svg>

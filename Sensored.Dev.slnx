@@ -1,0 +1,37 @@
+<Solution>
+  <Folder Name="/App/Sensored/">
+    <Project Path="src\Sensored\Sensored\Sensored.csproj" />
+    <Project Path="src\Sensored\WarpSensorsDataProcessor\WarpSensorsDataProcessor.csproj" />
+  </Folder>
+  <Folder Name="/App/FusionGauges/">
+    <Project Path="src\FusionGauges\WinFormsFusionGauges.WinFormsApp\WinFormsFusionGauges.WinFormsApp.csproj" />
+  </Folder>
+  <Folder Name="/App/Tests/">
+    <Project Path="src\Sensored\WarpSensorsDataProcessor.Tests\WarpSensorsDataProcessor.Tests.csproj" />
+    <Project Path="src\FusionGauges\FusionGauges.Tests\FusionGauges.Tests.csproj" />
+  </Folder>
+  <Folder Name="/WARP/">
+    <Project Path="..\WARP\src\WarpToolkit.ComponentModel\WarpToolkit.ComponentModel.csproj" />
+    <Project Path="..\WARP\src\WarpToolkit.Desktop.AI\WarpToolkit.Desktop.AI.csproj" />
+    <Project Path="..\WARP\src\WarpToolkit.Desktop.AppServices\WarpToolkit.Desktop.AppServices.csproj" />
+    <Project Path="..\WARP\src\WarpToolkit.Desktop.Async\WarpToolkit.Desktop.Async.csproj" />
+    <Project Path="..\WARP\src\WarpToolkit.Microsoft.Extensions.AI\WarpToolkit.Microsoft.Extensions.AI.csproj" />
+    <Project Path="..\WARP\src\WarpToolkit.Microsoft.Extensions\WarpToolkit.Microsoft.Extensions.csproj" />
+    <Project Path="..\WARP\src\WarpToolkit.Sensors.Abstractions\WarpToolkit.Sensors.Abstractions.csproj" />
+    <Project Path="..\WARP\src\WarpToolkit.Sensors.Fusion\WarpToolkit.Sensors.Fusion.csproj" />
+    <Project Path="..\WARP\src\WarpToolkit.Sensors.Presentation\WarpToolkit.Sensors.Presentation.csproj" />
+    <Project Path="..\WARP\src\WarpToolkit.Sensors\WarpToolkit.Sensors.csproj" />
+    <Project Path="..\WARP\src\WarpToolkit.Text.Spelling\WarpToolkit.Text.Spelling.csproj" />
+    <Project Path="..\WARP\src\WarpToolkit.Visuals.Abstractions\WarpToolkit.Visuals.Abstractions.csproj" />
+    <Project Path="..\WARP\src\WarpToolkit.Windows.Bluetooth\WarpToolkit.Windows.Bluetooth.csproj" />
+    <Project Path="..\WARP\src\WarpToolkit.Windows.Interop\WarpToolkit.Windows.Interop.csproj" />
+    <Project Path="..\WARP\src\WarpToolkit.Windows.Sensors\WarpToolkit.Windows.Sensors.csproj" />
+    <Project Path="..\WARP\src\WarpToolkit.WinForms.AppServices\WarpToolkit.WinForms.AppServices.csproj" />
+    <Project Path="..\WARP\src\WarpToolkit.WinForms.DirectX\WarpToolkit.WinForms.DirectX.csproj" />
+    <Project Path="..\WARP\src\WarpToolkit.WinForms.Drawing\WarpToolkit.WinForms.Drawing.csproj" />
+    <Project Path="..\WARP\src\WarpToolkit.WinForms.Extensions\WarpToolkit.WinForms.Extensions.csproj" />
+    <Project Path="..\WARP\src\WarpToolkit.WinForms.Sensors.DirectX\WarpToolkit.WinForms.Sensors.DirectX.csproj" />
+    <Project Path="..\WARP\src\WarpToolkit.WinForms.Specialized\WarpToolkit.WinForms.Specialized.csproj" />
+    <Project Path="..\WARP\src\WarpToolkit.WinForms\WarpToolkit.WinForms.csproj" />
+  </Folder>
+</Solution>

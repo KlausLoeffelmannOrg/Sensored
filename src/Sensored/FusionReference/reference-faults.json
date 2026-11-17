@@ -1,0 +1,37 @@
+{
+  "schema": "warp-fusion-scenario",
+  "version": 1,
+  "name": "reference-faults-v1",
+  "exportTransformedCopy": true,
+  "faults": [
+    {
+      "type": "ImuSpike",
+      "startSeconds": 150,
+      "durationSeconds": 0.05,
+      "axis": "Z",
+      "delta": 20
+    },
+    {
+      "type": "CompassDisturbance",
+      "startSeconds": 200,
+      "durationSeconds": 5,
+      "headingDeltaDegrees": 90,
+      "confidence": 0.2
+    },
+    {
+      "type": "GpsDropout",
+      "startSeconds": 300,
+      "durationSeconds": 10
+    },
+    {
+      "type": "GpsTunnel",
+      "startSeconds": 600,
+      "durationSeconds": 15
+    },
+    {
+      "type": "GpsWithheldFixes",
+      "startSeconds": 900,
+      "durationSeconds": 1
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+<Project>
+  <PropertyGroup Condition="'$(UseWindowsForms)' == 'true'">
+    <Platforms>AnyCPU;x64;ARM64</Platforms>
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == ''">win-$(WarpBuildArchitecture)</RuntimeIdentifier>
+    <PlatformTarget Condition="'$(OutputType)' == 'Exe' Or '$(OutputType)' == 'WinExe'">$(WarpBuildArchitecture)</PlatformTarget>
+  </PropertyGroup>
+  <Target Name="ValidateWarpReferenceMode" BeforeTargets="CollectPackageReferences;PrepareForBuild">
+    <Error Condition="'$(UsePackageDependency)' != 'true' And '$(UsePackageDependency)' != 'false'"
+           Text="UsePackageDependency must be true or false." />
+    <Error Condition="'$(UsePackageDependency)' == 'false' And !Exists('$(WarpRoot)src\WarpToolkit.Sensors\WarpToolkit.Sensors.csproj')"
+           Text="Project mode requires a WARP checkout at $(WarpRoot). Set WarpRoot or open Sensored.slnx for NuGet mode." />
+  </Target>
+</Project>

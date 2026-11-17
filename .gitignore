@@ -1,13 +1,9 @@
-﻿################################################################################
-# This .gitignore file was automatically created by Microsoft(R) Visual Studio.
-################################################################################
-
-/.vs/Sensored/FileContentIndex/18c6caab-763d-446f-bb77-4e8fa1f71a99.vsidx
-/.vs/Sensored/FileContentIndex/557f447a-8275-484a-bfc1-eb68771d4464.vsidx
-/.vs/Sensored/FileContentIndex/017935b9-d527-4ed1-b5ae-7a3f6858d070.vsidx
-/.vs/Sensored/FileContentIndex/29b9381f-f6fa-4418-a51c-463fbba65224.vsidx
-/.vs/ProjectSettings.json
-/.vs/Sensored/FileContentIndex/caa186fd-aab2-41d7-b8d1-2a69360f3857.vsidx
-/.vs/slnx.sqlite
-/.vs/Sensored/FileContentIndex
-/.vs
+.vs/
+**/bin/
+**/obj/
+/artifacts/
+*.user
+*.suo
+*.binlog
+packages.lock.json
+/src/Sensored/ReferenceData/

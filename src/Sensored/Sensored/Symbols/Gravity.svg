@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <title>Gravity vector</title>
+  <desc>Direction and magnitude of the platform gravity estimate.</desc>
+  <g fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="5.8" r="2.8"/>
+    <path d="M12 8.6v9.8m-3.4-3.1 2.8 2.8q.6.6 1.2 0l2.8-2.8"/>
+    <path d="M4 20.5c4.8 1 11.2 1 16 0" stroke-width="1"/>
+    <path d="M9 10.5v2m6-2v2" stroke-width=".85" opacity=".65"/>
+  </g>
+</svg>

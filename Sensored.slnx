@@ -1,0 +1,14 @@
+<Solution>
+  <Folder Name="/App/Sensored/">
+    <Project Path="src\Sensored\Sensored\Sensored.csproj" />
+    <Project Path="src\Sensored\WarpSensorsDataProcessor\WarpSensorsDataProcessor.csproj" />
+  </Folder>
+  <Folder Name="/App/FusionGauges/">
+    <Project Path="src\FusionGauges\WinFormsFusionGauges.WinFormsApp\WinFormsFusionGauges.WinFormsApp.csproj" />
+  </Folder>
+  <Folder Name="/App/Tests/">
+    <Project Path="src\Sensored\WarpSensorsDataProcessor.Tests\WarpSensorsDataProcessor.Tests.csproj" />
+    <Project Path="src\FusionGauges\FusionGauges.Tests\FusionGauges.Tests.csproj" />
+  </Folder>
+  <Folder Name="/WARP/" />
+</Solution>

@@ -1,0 +1,41 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net11.0-windows10.0.22000.0</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <IsPackable>false</IsPackable>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.11.0" />
+    <PackageReference Include="xunit.v3.mtp-off" Version="4.0.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="4.0.1" PrivateAssets="all" />
+    <ProjectReference Include="..\WinFormsFusionGauges.WinFormsApp\WinFormsFusionGauges.WinFormsApp.csproj" />
+    <ProjectReference Include="..\..\Sensored\Sensored\Sensored.csproj" />
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(UsePackageDependency)' == 'false'">
+    <ProjectReference Include="$(WarpRoot)src\WarpToolkit.Sensors.Abstractions\WarpToolkit.Sensors.Abstractions.csproj" />
+    <ProjectReference Include="$(WarpRoot)src\WarpToolkit.Sensors.Fusion\WarpToolkit.Sensors.Fusion.csproj" />
+    <ProjectReference Include="$(WarpRoot)src\WarpToolkit.Sensors.Presentation\WarpToolkit.Sensors.Presentation.csproj" />
+    <ProjectReference Include="$(WarpRoot)src\WarpToolkit.Sensors\WarpToolkit.Sensors.csproj" />
+    <ProjectReference Include="$(WarpRoot)src\WarpToolkit.Windows.Bluetooth\WarpToolkit.Windows.Bluetooth.csproj" />
+    <ProjectReference Include="$(WarpRoot)src\WarpToolkit.Windows.Sensors\WarpToolkit.Windows.Sensors.csproj" />
+    <ProjectReference Include="$(WarpRoot)src\WarpToolkit.WinForms.DirectX\WarpToolkit.WinForms.DirectX.csproj" />
+    <ProjectReference Include="$(WarpRoot)src\WarpToolkit.WinForms.Sensors.DirectX\WarpToolkit.WinForms.Sensors.DirectX.csproj" />
+    <ProjectReference Include="$(WarpRoot)src\WarpToolkit.WinForms\WarpToolkit.WinForms.csproj" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(UsePackageDependency)' == 'true'">
+    <PackageReference Include="WarpToolkit.Sensors.Abstractions" Version="$(WarpPackageVersion)" />
+    <PackageReference Include="WarpToolkit.Sensors.Fusion" Version="$(WarpPackageVersion)" />
+    <PackageReference Include="WarpToolkit.Sensors.Presentation" Version="$(WarpPackageVersion)" />
+    <PackageReference Include="WarpToolkit.Sensors" Version="$(WarpPackageVersion)" />
+    <PackageReference Include="WarpToolkit.Windows.Bluetooth" Version="$(WarpPackageVersion)" />
+    <PackageReference Include="WarpToolkit.Windows.Sensors" Version="$(WarpPackageVersion)" />
+    <PackageReference Include="WarpToolkit.WinForms.DirectX" Version="$(WarpPackageVersion)" />
+    <PackageReference Include="WarpToolkit.WinForms.Sensors.DirectX" Version="$(WarpPackageVersion)" />
+    <PackageReference Include="WarpToolkit.WinForms" Version="$(WarpPackageVersion)" />
+  </ItemGroup>
+</Project>

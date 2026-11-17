@@ -1,0 +1,24 @@
+<Project>
+  <PropertyGroup>
+    <SensoredRoot>$(MSBuildThisFileDirectory)</SensoredRoot>
+    <WarpRoot Condition="'$(WarpRoot)' == ''">$([MSBuild]::NormalizeDirectory('$(SensoredRoot)', '..', 'WARP'))</WarpRoot>
+    <WarpRoot>$([MSBuild]::NormalizeDirectory('$(WarpRoot)'))</WarpRoot>
+    <UsePackageDependency Condition="'$(UsePackageDependency)' == '' And '$(SolutionName)' == 'Sensored.Dev'">false</UsePackageDependency>
+    <UsePackageDependency Condition="'$(UsePackageDependency)' == ''">true</UsePackageDependency>
+    <WarpPackageVersion Condition="'$(WarpPackageVersion)' == ''">0.11.0-preview.ge4bd1a23</WarpPackageVersion>
+    <SensoredDependencyMode Condition="'$(UsePackageDependency)' == 'true'">package</SensoredDependencyMode>
+    <SensoredDependencyMode Condition="'$(UsePackageDependency)' == 'false'">project</SensoredDependencyMode>
+    <WarpBuildArchitecture Condition="'$(WarpBuildArchitecture)' == '' And '$(RuntimeIdentifier)' == 'win-arm64'">arm64</WarpBuildArchitecture>
+    <WarpBuildArchitecture Condition="'$(WarpBuildArchitecture)' == '' And '$(RuntimeIdentifier)' == 'win-x64'">x64</WarpBuildArchitecture>
+    <WarpBuildArchitecture Condition="'$(WarpBuildArchitecture)' == '' And ('$(Platform)' == 'ARM64' Or '$(Platform)' == 'arm64')">arm64</WarpBuildArchitecture>
+    <WarpBuildArchitecture Condition="'$(WarpBuildArchitecture)' == '' And '$(Platform)' == 'x64'">x64</WarpBuildArchitecture>
+    <WarpBuildArchitecture Condition="'$(WarpBuildArchitecture)' == ''">$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)</WarpBuildArchitecture>
+    <WarpBuildArchitecture>$(WarpBuildArchitecture.ToLowerInvariant())</WarpBuildArchitecture>
+    <UseArtifactsOutput>true</UseArtifactsOutput>
+    <ArtifactsPath>$(SensoredRoot)artifacts</ArtifactsPath>
+    <ArtifactsProjectName>$(MSBuildProjectName)_$(SensoredDependencyMode)_$(WarpBuildArchitecture)</ArtifactsProjectName>
+    <DefaultItemExcludes>$(DefaultItemExcludes);**\bin\**;**\obj\**</DefaultItemExcludes>
+    <IsPackable>false</IsPackable>
+    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+  </PropertyGroup>
+</Project>

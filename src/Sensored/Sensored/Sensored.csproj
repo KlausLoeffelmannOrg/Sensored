@@ -1,0 +1,89 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net11.0-windows10.0.22000.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+
+    <!--
+      Single-project MSIX packaging. dotnet build still produces the plain WinForms exe (the
+      AppxPackage targets are only imported under Visual Studio MSBuild); the .msix package is
+      produced by VS MSBuild via /t:Publish. Package identity is required for the WinRT
+      consent-gated capabilities declared in Package.appxmanifest (location, Bluetooth, microphone)
+      to be granted at runtime.
+    -->
+    <EnableMsixTooling>true</EnableMsixTooling>
+    <WindowsPackageType>MSIX</WindowsPackageType>
+    <Platforms>AnyCPU;x64;arm64</Platforms>
+    <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
+    <GenerateAppxPackageOnBuild>false</GenerateAppxPackageOnBuild>
+    <AppxPackageSigningEnabled>false</AppxPackageSigningEnabled>
+    <StartupObject>Sensored.Program</StartupObject>
+    <AnalysisLevel>latest-recommended</AnalysisLevel>
+    <NeutralLanguage>en</NeutralLanguage>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(UsePackageDependency)' == 'false'">
+    <ProjectReference Include="$(WarpRoot)src\WarpToolkit.Windows.Bluetooth\WarpToolkit.Windows.Bluetooth.csproj" />
+    <ProjectReference Include="$(WarpRoot)src\WarpToolkit.Sensors.Abstractions\WarpToolkit.Sensors.Abstractions.csproj" />
+    <ProjectReference Include="$(WarpRoot)src\WarpToolkit.Sensors\WarpToolkit.Sensors.csproj" />
+    <ProjectReference Include="$(WarpRoot)src\WarpToolkit.Sensors.Fusion\WarpToolkit.Sensors.Fusion.csproj" />
+    <ProjectReference Include="$(WarpRoot)src\WarpToolkit.Sensors.Presentation\WarpToolkit.Sensors.Presentation.csproj" />
+    <ProjectReference Include="$(WarpRoot)src\WarpToolkit.Windows.Sensors\WarpToolkit.Windows.Sensors.csproj" />
+    <ProjectReference Include="$(WarpRoot)src\WarpToolkit.WinForms.Sensors.DirectX\WarpToolkit.WinForms.Sensors.DirectX.csproj" />
+    <ProjectReference Include="$(WarpRoot)src\WarpToolkit.WinForms\WarpToolkit.WinForms.csproj" />
+    <ProjectReference Include="$(WarpRoot)src\WarpToolkit.WinForms.Specialized\WarpToolkit.WinForms.Specialized.csproj" />
+    <ProjectReference Include="$(WarpRoot)src\WarpToolkit.WinForms.Extensions\WarpToolkit.WinForms.Extensions.csproj" />
+    <ProjectReference Include="$(WarpRoot)src\WarpToolkit.WinForms.AppServices\WarpToolkit.WinForms.AppServices.csproj" />
+    <ProjectReference Include="$(WarpRoot)src\WarpToolkit.ComponentModel\WarpToolkit.ComponentModel.csproj" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(UsePackageDependency)' == 'true'">
+    <PackageReference Include="WarpToolkit.Windows.Bluetooth" Version="$(WarpPackageVersion)" />
+    <PackageReference Include="WarpToolkit.Sensors.Abstractions" Version="$(WarpPackageVersion)" />
+    <PackageReference Include="WarpToolkit.Sensors" Version="$(WarpPackageVersion)" />
+    <PackageReference Include="WarpToolkit.Sensors.Fusion" Version="$(WarpPackageVersion)" />
+    <PackageReference Include="WarpToolkit.Sensors.Presentation" Version="$(WarpPackageVersion)" />
+    <PackageReference Include="WarpToolkit.Windows.Sensors" Version="$(WarpPackageVersion)" />
+    <PackageReference Include="WarpToolkit.WinForms.Sensors.DirectX" Version="$(WarpPackageVersion)" />
+    <PackageReference Include="WarpToolkit.WinForms" Version="$(WarpPackageVersion)" />
+    <PackageReference Include="WarpToolkit.WinForms.Specialized" Version="$(WarpPackageVersion)" />
+    <PackageReference Include="WarpToolkit.WinForms.Extensions" Version="$(WarpPackageVersion)" />
+    <PackageReference Include="WarpToolkit.WinForms.AppServices" Version="$(WarpPackageVersion)" />
+    <PackageReference Include="WarpToolkit.ComponentModel" Version="$(WarpPackageVersion)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="FusionGauges.Tests" />
+    <Using Include="WarpToolkit.Sensors" />
+    <Using Include="WarpToolkit.Sensors.Presentation" />
+    <Using Include="WarpToolkit.Windows.Sensors" />
+    <Using Include="WarpToolkit.WinForms.Controls" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <AppxManifest Include="Package.appxmanifest">
+      <SubType>Designer</SubType>
+    </AppxManifest>
+    <Content Include="Images\**\*.png" />
+    <EmbeddedResource Include="Symbols\**\*.svg" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Update="Properties\Resources.Designer.cs">
+      <DesignTime>True</DesignTime>
+      <AutoGen>True</AutoGen>
+      <DependentUpon>Resources.resx</DependentUpon>
+    </Compile>
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Update="Properties\Resources.resx">
+      <Generator>ResXFileCodeGenerator</Generator>
+      <LastGenOutput>Resources.Designer.cs</LastGenOutput>
+    </EmbeddedResource>
+  </ItemGroup>
+
+</Project>

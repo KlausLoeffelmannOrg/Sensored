@@ -1,0 +1,37 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net11.0-windows10.0.22000.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="FusionGauges.Tests" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(UsePackageDependency)' == 'false'">
+    <ProjectReference Include="$(WarpRoot)src\WarpToolkit.WinForms.AppServices\WarpToolkit.WinForms.AppServices.csproj" />
+    <ProjectReference Include="$(WarpRoot)src\WarpToolkit.WinForms\WarpToolkit.WinForms.csproj" />
+    <ProjectReference Include="$(WarpRoot)src\WarpToolkit.WinForms.Sensors.DirectX\WarpToolkit.WinForms.Sensors.DirectX.csproj" />
+    <ProjectReference Include="$(WarpRoot)src\WarpToolkit.WinForms.DirectX\WarpToolkit.WinForms.DirectX.csproj" />
+    <ProjectReference Include="$(WarpRoot)src\WarpToolkit.Windows.Sensors\WarpToolkit.Windows.Sensors.csproj" />
+    <ProjectReference Include="$(WarpRoot)src\WarpToolkit.Windows.Bluetooth\WarpToolkit.Windows.Bluetooth.csproj" />
+    <ProjectReference Include="$(WarpRoot)src\WarpToolkit.Sensors\WarpToolkit.Sensors.csproj" />
+    <ProjectReference Include="$(WarpRoot)src\WarpToolkit.Sensors.Fusion\WarpToolkit.Sensors.Fusion.csproj" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(UsePackageDependency)' == 'true'">
+    <PackageReference Include="WarpToolkit.WinForms.AppServices" Version="$(WarpPackageVersion)" />
+    <PackageReference Include="WarpToolkit.WinForms" Version="$(WarpPackageVersion)" />
+    <PackageReference Include="WarpToolkit.WinForms.Sensors.DirectX" Version="$(WarpPackageVersion)" />
+    <PackageReference Include="WarpToolkit.WinForms.DirectX" Version="$(WarpPackageVersion)" />
+    <PackageReference Include="WarpToolkit.Windows.Sensors" Version="$(WarpPackageVersion)" />
+    <PackageReference Include="WarpToolkit.Windows.Bluetooth" Version="$(WarpPackageVersion)" />
+    <PackageReference Include="WarpToolkit.Sensors" Version="$(WarpPackageVersion)" />
+    <PackageReference Include="WarpToolkit.Sensors.Fusion" Version="$(WarpPackageVersion)" />
+  </ItemGroup>
+
+</Project>

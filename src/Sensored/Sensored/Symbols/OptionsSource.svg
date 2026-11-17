@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <title>Sensor source options</title>
+  <desc>Selects Windows, serial GPS, or health-only sensor sources.</desc>
+  <g fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="7.4" cy="12" r="2.2"/>
+    <path d="M4 8.6a4.8 4.8 0 0 0 0 6.8m6.8-6.8a4.8 4.8 0 0 1 0 6.8" stroke-width="1"/>
+    <path d="M13 5.5h7.5m-7.5 13h7.5M16.5 3v5m2 8v5"/>
+    <path d="M15 12h5.5" stroke-width=".9"/>
+    <circle cx="17" cy="12" r="1.2" fill="currentColor" stroke="none"/>
+  </g>
+</svg>
