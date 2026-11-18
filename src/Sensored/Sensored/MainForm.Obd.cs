@@ -35,6 +35,7 @@ public partial class MainForm
         ObservePerformanceTiming(observation);
         ObservePlausibility(observation);
         ObserveFusionLearning(observation);
+        ObserveRoadLearning(observation);
         if (observation.Estimate is { } estimate)
         {
             _vehicleTrip.Observe(estimate.Timestamp,

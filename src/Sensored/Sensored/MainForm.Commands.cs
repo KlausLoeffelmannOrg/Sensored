@@ -65,8 +65,7 @@ public partial class MainForm
     {
         _commandUiThreadId = Environment.CurrentManagedThreadId;
         EnsureCalibrationUi();
-        _toolStrip.Items.Insert(_toolStrip.Items.IndexOf(_calibrateButton) + 1, _fusionFeedbackButton);
-        _toolStrip.Items.Insert(_toolStrip.Items.IndexOf(_recordingButton), _drivingTasksButton);
+        _toolStrip.Items.Insert(_toolStrip.Items.IndexOf(_calibrateButton) + 1, _learningQuizButton);
         ConfigureCommandImages();
         _replayOpenMenuItem.Symbol = SensorDemoSymbols.OpenRecordingFolder;
         _replayOpenMenuItem.AccessibleName = "Open recording";
@@ -177,8 +176,7 @@ public partial class MainForm
     private void ConfigureCommandImages()
     {
         int symbolSize = (int)_options.ToolbarSize;
-        ConfigureDrivingTasksCommand(symbolSize);
-        ConfigureFusionLearningCommand(symbolSize);
+        ConfigureRoadLearningCommand(symbolSize);
         _startButton.ConfigureItem(
             _toolStrip,
             FluentSymbols.AllSymbols.Play,
@@ -338,7 +336,7 @@ public partial class MainForm
         UpdateSensorSourcesUi(BluetoothSensorsAvailable, BluetoothSensorsStatus);
         _optionsButton.Enabled = available;
         _calibrateButton.Enabled = available;
-        UpdateDrivingTasksCommand();
+        UpdateRoadLearningCommand();
         _mapButton.Enabled = available;
         _mapButton.Text = _mapEnabled ? "Map" : "Map off";
         _mapEnabledMenuItem.Checked = _mapEnabled;

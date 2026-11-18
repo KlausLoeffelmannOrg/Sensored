@@ -120,61 +120,90 @@ See the [WARP road-capture protocol](https://github.com/KlausLoeffelmannOrg/WARP
 for route types, safe maneuver pairs, marker/notes conventions and reference limits.
 The marker retains canonical input sequence/engine epoch for later segment lookup.
 
-### Optional driving tasks (first version)
+### Opt-in road learning Quizz
 
-Open **Driving tasks** on the main toolbar while parked. Choose one upcoming condition:
-parked baseline, steady straight road, normal speed changes, gentle bends, straight hill,
-hill with bends, ordinary uneven surface, or natural GPS obstruction. Each choice explains
-what would be useful to collect and why. Add optional direction/surface/reference notes and
-choose **Use task**, then use the normal **Start** and **Record** commands.
+**Start learning Quizz** replaces **Driving tasks** and **Fusion feedback** on the toolbar.
+Start live acquisition first, then explicitly start a learning session when safe.
+Only a passenger may interact while moving. Calibration in Tools/Options and the
+**Fusion setup** toolbar command are unchanged.
 
-The guide is off by default and does not start recording, alter fusion, enforce speed/motion
-checks or judge completion. A selection stays armed for later recordings in this app run.
-A passenger can switch tasks during a recording; otherwise leave the app alone until parked.
-Choose **Off - unguided recording** and apply to end task labeling without stopping recording.
-Cancel leaves the previous selection unchanged.
+The modeless, large-text window collects a rolling 30-second context. A different
+condition must remain the candidate for two seconds before it is asked; a changed
+level alone does not repeat the last asked condition. Tap **Level 1..5** to confirm
+the named condition with your subjective severity, or **0 - Wrong assessment** to
+reject only that condition. There is no default answer. Questions expire after ten
+seconds; silence, dismissal and pauses never produce labels.
 
-`*.MarkersV2.jsonl` retains `driving-task-v1` intent-start/end markers, task IDs, notes, UTC
-times and the last processed input sequence/engine epoch. These bound the **selection
-interval**, not the precise physical event or measured road truth. Stopping recording ends
-the label, not a successfully completed task. Keep the whole recording folder for analysis.
+**Disregard Last** durably retracts the last non-retracted answer in this session.
+The arrows select **1..20 minutes** (initially five); **Pause** dismisses the
+question and suppresses prompts while sensing continues. **End Quizz**, closing
+the window, stopping/restarting acquisition, entering replay or shutdown ends the
+session. Pending writes finish before the window closes.
 
-### Fusion progress and retrospective feedback (first step)
+The StatusStrip exposes GPS speed/acceleration, vehicle speed/acceleration/RPM,
+internal accelerometer/gyroscope and Bluetooth accelerometer/gyroscope evidence.
+Tap any field for a larger table; this discards the question before opening the
+table and cannot create an answer. Missing/stale sources contribute nothing.
+Reported percentages are **experimental rule scores/evidence shares, not
+calibrated probabilities or independent gains in accuracy**. RPM, gyro and
+supported body pitch are retained as context, not assumed to establish a class.
 
-The readiness panel below the instruments now shows the remaining declared gravity-error
-budget, the latest moving-renewal gate (including independent-window progress), and retained
-coverage for the current mount/source: sessions, supported seconds, dropouts and moving
-renewals. These are evidence counters, **not a learned accuracy percentage**. The default
-stopped reference grows from 1 to 5 degrees of declared tilt error in about 23 seconds even
-with zero rotation; rotation can shorten that interval. Moving renewal requires three
-separate time-matched OBD/IMU windows and abstains on turns, roughness, gaps or other failed
-physical/timing gates. Merely driving longer does not remove those gates.
+The cold-start interpreter (`road-rules-v1`) covers the whole catalogue with
+explainable motion rules over the 30-second window:
 
-**Fusion feedback (N)** opens a large-button review screen only when acquisition is stopped
-or fresh quiet/stopped evidence is available. Confirm that you are safely parked. No dialog
-pops up while moving; review locks if stopped evidence becomes stale or motion resumes.
-Choose acceleration and incline independently, optionally combine hard turn and braking,
-and use Unknown or notes when unsure. Cancel leaves the episode unanswered.
+| Condition(s) | Evidence used | Level |
+|---|---|---|
+| Rough / wavy road | IMU magnitude variability; 1 s means separate waves | vibration |
+| Acceleration / braking | source-time speed slope (vehicle, else GPS) | m/s² |
+| Emergency braking | speed drop > 5.5 m/s² in the last 4 s | none |
+| Level→uphill/downhill, downhill↔uphill | supported pitch, first 10 s vs last 5 s | grade (level→hill only) |
+| Up/downhill + left/right curve | supported lateral acceleration + pitch | driving style |
+| Starting off uphill / level start | start from standstill + pitch | grade / acceleration |
+| Stopping uphill / braking to standstill up/downhill / level | stop + pitch; gentle (< 1.5 m/s²) vs braking | grade / deceleration |
+| Waiting at traffic light | stopped ≥ 12 s after moving | none |
+| Waiting at stop sign | full stop 0.5–6 s, then straight departure | none |
+| Intersection stop | short stop, then ≥ 45° GPS course change or strong lateral | none |
+| Traffic jam stop and go | ≥ 2 stops in the window below 12 m/s | none |
+| Highway driving | ≥ 20 s above 20 m/s, steady speed | none |
+| Enter / exit highway | crossing 17↔22 m/s with ramp evidence (course ≥ 45° or lateral ≥ 1.5 m/s²) | none |
+| Driving backwards | longitudinal acceleration opposing speed slope, or GPS course flip across a stop | none |
+| Parallel parking | < 3 m/s, ≥ 2 stops, a reverse segment | none |
 
-Live support losses and qualified odometer/IMU ambiguities queue original timestamped
-episodes, at most one per 30 seconds with up to 100 unanswered episodes; a full queue is
-shown explicitly and existing evidence is never evicted. Each retains a session ID, mount/
-source profile, original input sequence range, engine epoch, source generation, reason and
-available acceleration observations. When recording, the original recording folder is
-retained for segment analysis; an episode without recording has no raw companion.
-Replay never adds evidence or applies the current live profile to historical inputs.
+Without pitch the start/stop rules fall back to "grade unknown" classes; a plain
+stop without prior motion is "Stopped". Semantic causes (light, sign, ramp,
+parking, jam, reverse) are inferred from motion only and start at a lower score.
+These are unvalidated proxies: body pitch is assumed nose-up positive and only
+approximates grade; a stop-sign/light split by stop duration and a ramp by turn
+plus speed change can be wrong, which is exactly what the passenger's answer
+records. Conflicting GPS/vehicle speeds cause abstention. Levels are provisional
+thresholds the passenger can correct.
+Each answer is a self-contained, atomically replaced JSON example under
+`%LocalAppData%\WARP\Sensored\RoadLearning\quiz-v1\<session-id>\<question-id>.json`.
+It includes schema/model versions, the frozen guess and score, the mount/source
+profile, evidence table, optional recording path, and up to 20 Hz per-source
+samples from the last 30 seconds with original timestamps, sequence, epoch and
+generation. Undo preserves the original example with `Retracted: true`.
+Level zero is a rejected guess, not a corrected class or a negative for other
+classes. Storage errors are reported, not counted as saved answers.
+Gaps, source/generation/epoch changes and clock discontinuities require a fresh
+window. Replay does not collect quiz examples. Historical `driving-task-v1`
+recording markers and `FusionLearning\evidence-v1.json` remain compatible; legacy
+evidence is retained separately and is not imported as training truth.
 
-Evidence and answers are checkpointed every 30 seconds and at session end to
-`%LocalAppData%\WARP\Sensored\FusionLearning\evidence-v1.json`, outside assembly-version
-settings. Restarting acquisition, changing the frame or restarting the app does not erase
-them. Mount revisions/source configuration have separate coverage profiles; all saved
-answers remain reviewable. Failed checkpoints are reported and retain dirty data for retry.
+**Architecture discussion (Fable 2, Grok 4.7 and GPT Astra 6.2):** all favor a
+separate semantic interpretation layer over changing physical fusion from user
+labels. Fable favors per-condition logistic/perceptron units with source
+interaction features; Astra and Grok recommend collecting versioned examples and
+keeping an explainable baseline before fitting weights. The agreed rollout is
+offline training, excluding retractions and treating missingness explicitly,
+then evaluation on whole held-out drives/profiles and shadow scoring before
+promotion. Adjacent overlapping windows must not straddle train/test splits.
+Compare false prompts at matched coverage and check probability calibration
+before describing a score as agreement probability.
 
-This is the feedback/evidence foundation, **not yet adaptive sensor calibration**.
-User labels do not establish road grade, gyro bias or physical mounting and never renew
-gravity or relax support bounds. Frame/navigation state still starts fresh for safety.
-The next calibration step needs replay-validated use of the recorded labeled intervals,
-with an explicit device/mount-specific model and independently justified error bounds.
+There is **no online training or learned model yet**. Quiz labels never change
+gravity, sensor weights, mounting or physical support. Even a future restrictive
+fusion veto needs independent replay validation; labels alone cannot justify it.
 
 The root `Sensored.slnx` uses WARP NuGets; `Sensored.Dev.slnx` uses sibling WARP projects.
 The executable project is `src\Sensored\Sensored\Sensored.csproj`.

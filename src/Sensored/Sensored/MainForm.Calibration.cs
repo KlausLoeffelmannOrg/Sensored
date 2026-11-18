@@ -147,13 +147,13 @@ public partial class MainForm
     {
         FusionReadinessSnapshot readiness = ReadFusionReadiness();
         _tabletFrameLabel.Text = readiness.Summary;
-        string progress = PresentFusionLearning(readiness.BodyOutputsSupported);
-        _tabletFrameLabel.ToolTipText = readiness.Details + Environment.NewLine + progress;
+        CheckpointFusionLearning();
+        _tabletFrameLabel.ToolTipText = readiness.Details;
         if (_lastReadinessSummary != readiness.Summary)
         {
             _lastReadinessSummary = readiness.Summary;
             _log.Information($"Fusion readiness: {readiness.Summary}");
-            NotifyStatusChange(readiness.Summary + Environment.NewLine + progress);
+            NotifyStatusChange(readiness.Summary);
         }
     }
 }

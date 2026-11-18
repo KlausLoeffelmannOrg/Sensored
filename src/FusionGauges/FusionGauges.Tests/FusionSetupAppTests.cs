@@ -38,19 +38,25 @@ public sealed class FusionSetupAppTests
         });
 
     [Fact]
-    public async Task FusionFeedbackIsReachableFromTheToolbarAndImageRefreshDoesNotDuplicateIt()
+    public async Task LearningQuizReplacesImprovementCommandsAndPreservesFusionCalibration()
         => await RunStaAsync(async () =>
         {
             await using SensorService service = CreateService();
             using Sensored.MainForm form = new(service);
             ToolStrip toolbar = Field<ToolStrip>(form, "_toolStrip");
-            ToolStripButton feedback = Field<ToolStripButton>(form, "_fusionFeedbackButton");
+            ToolStripButton quiz = Field<ToolStripButton>(form, "_learningQuizButton");
             ToolStripButton calibration = Field<ToolStripButton>(form, "_calibrateButton");
-            Assert.Same(toolbar, feedback.Owner);
-            Assert.True(feedback.Available);
-            Assert.Equal(toolbar.Items.IndexOf(calibration) + 1, toolbar.Items.IndexOf(feedback));
+            Assert.Same(toolbar, quiz.Owner);
+            Assert.True(quiz.Available);
+            Assert.False(quiz.Enabled);
+            Assert.False(quiz.Checked);
+            Assert.True(calibration.Available);
+            Assert.Equal(toolbar.Items.IndexOf(calibration) + 1, toolbar.Items.IndexOf(quiz));
+            Assert.DoesNotContain(toolbar.Items.Cast<ToolStripItem>(),
+                item => item.Text is "Fusion feedback" or "Driving tasks");
             Invoke(form, "ConfigureCommandImages");
-            Assert.Single(toolbar.Items.Cast<ToolStripItem>(), item => item == feedback);
+            Assert.Single(toolbar.Items.Cast<ToolStripItem>(), item => item == quiz);
+            Assert.Equal(SensorServiceState.Stopped, service.State);
         });
 
     [Fact]
@@ -1462,84 +1468,137 @@ public sealed class FusionSetupAppTests
             return Task.CompletedTask;
         });
 
-    [Fact]
-    public async Task SensoredDrivingTaskCommandIsOptInAndCancelPreservesTheSelectionWithoutStartingSources()
-        => await RunStaAsync(async () =>
-        {
-            await using SensorService service = CreateService();
-            using Sensored.MainForm form = new(service);
-            ToolStripButton command = Field<ToolStripButton>(form, "_drivingTasksButton");
-            Assert.False(command.Checked);
-            Assert.Null(Field<DrivingTaskSelection>(form, "_selectedDrivingTask"));
-            bool cancel = false;
-            int inspected = 0;
-            using System.Windows.Forms.Timer chooser = new() { Interval = 100 };
-            chooser.Tick += (_, _) =>
-            {
-                DrivingTaskDialog? dialog = Application.OpenForms.OfType<DrivingTaskDialog>().FirstOrDefault();
-                if (dialog is null)
-                {
-                    return;
-                }
-
-                inspected++;
-                chooser.Stop();
-                Field<ComboBox>(dialog, "_tasks").SelectedIndex = cancel ? 2 : 1;
-                Field<TextBox>(dialog, "_notes").Text = cancel ? "discard this edit" : "estimated level; no survey";
-                dialog.DialogResult = cancel ? DialogResult.Cancel : DialogResult.OK;
-            };
-            chooser.Start();
-            command.PerformClick();
-            DrivingTaskSelection selection = Field<DrivingTaskSelection>(form, "_selectedDrivingTask");
-            Assert.Equal(DrivingCaptureTask.All[1], selection.Task);
-            Assert.Equal("estimated level; no survey", selection.Notes);
-            Assert.True(command.Checked);
-            cancel = true;
-            chooser.Start();
-            command.PerformClick();
-            Assert.Equal(2, inspected);
-            Assert.Same(selection, Field<DrivingTaskSelection>(form, "_selectedDrivingTask"));
-            Assert.Equal(SensorServiceState.Stopped, service.State);
-            Assert.Null(Field<ISensorRecordingSession>(form, "_recording"));
-        });
-
     [Theory]
     [InlineData(9f)]
     [InlineData(12f)]
     [InlineData(24f)]
-    public async Task DrivingTaskGuideKeepsReadableGuidanceAndEqualActionsAtOwnerFont(float points)
+    public async Task LearningQuizHasSixLargeAnswersPauseBoundsAndDismissesViewedEvidence(float points)
         => await RunStaAsync(() =>
         {
             using Font font = new(SystemFonts.MessageBoxFont!.FontFamily, points);
-            using DrivingTaskDialog dialog = new(null, false, font);
+            RoadLearningSession session = new("test-profile");
+            using RoadLearningJournal journal = new(Path.GetTempPath(), session.Id);
+            using RoadLearningQuizDialog dialog = new(session, journal, () => true, () => null,
+                (_, exception) => throw exception, font);
             dialog.StartPosition = FormStartPosition.Manual;
             dialog.Location = new Point(-20000, -20000);
             dialog.Show();
-            Assert.Null(dialog.Selection);
-            ComboBox tasks = Field<ComboBox>(dialog, "_tasks");
-            tasks.SelectedIndex = 5;
-            Field<TextBox>(dialog, "_notes").Text = " downhill; grade unknown ";
-            Assert.Equal("downhill; grade unknown", dialog.Selection!.Notes);
-            Assert.Contains("WHY IT HELPS", Field<TextBox>(dialog, "_guidance").Text);
+            FlowLayoutPanel answers = Field<FlowLayoutPanel>(dialog, "_answers");
+            Assert.False(answers.Enabled);
+            Assert.Equal(6, answers.Controls.Count);
+            Assert.All(answers.Controls.OfType<RadioButton>(), answer =>
+            {
+                Assert.True(answer.Height >= 58);
+                Assert.True(answer.Font.SizeInPoints >= 20);
+            });
+            for (int index = 0; index < 30; index++) { Field<Button>(dialog, "_less").PerformClick(); }
+            Assert.Equal("Pause 1 min.", Field<Button>(dialog, "_pause").Text);
+            for (int index = 0; index < 30; index++) { Field<Button>(dialog, "_more").PerformClick(); }
+            Assert.Equal("Pause 20 min.", Field<Button>(dialog, "_pause").Text);
+            Assert.False(Field<Button>(dialog, "_more").Enabled);
+            DateTimeOffset start = DateTimeOffset.UtcNow.AddSeconds(-32);
+            for (int tick = 0; tick <= 128; tick++)
+            {
+                DateTimeOffset time = start.AddSeconds(tick / 4d);
+                session.Observe(new(time, time, tick, 0, "test-vehicle", 1, LearningSource.Vehicle, Speed: 5 + tick / 4d));
+                if (tick == 120) { dialog.Poll(time); }
+            }
+
+            dialog.Poll(start.AddSeconds(32));
+            Assert.True(answers.Enabled);
+            Assert.All(answers.Controls.OfType<RadioButton>(), answer => Assert.False(answer.Checked));
             dialog.PerformLayout();
-            TableLayoutPanel layout = Field<TableLayoutPanel>(dialog, "_layout");
             Assert.Equal(points, dialog.Font.SizeInPoints);
-            Assert.True(dialog.ClientRectangle.Contains(layout.Bounds));
-            Assert.All(layout.Controls.Cast<Control>(), control =>
-                Assert.True(layout.ClientRectangle.Contains(control.Bounds), $"{control.Name}: {control.Bounds}"));
-            Assert.True(Field<TextBox>(dialog, "_guidance").Height >= font.Height);
-            Assert.True(Field<TextBox>(dialog, "_notes").Height >= font.Height);
-            Button apply = Field<Button>(dialog, "_apply");
-            Button cancel = Field<Button>(dialog, "_cancel");
-            Assert.Equal(apply.Height, cancel.Height);
-            Assert.InRange(Math.Abs(apply.Width - cancel.Width), 0, 1);
-            Assert.True(apply.Height >= apply.GetPreferredSize(Size.Empty).Height);
-            tasks.SelectedIndex = 0;
-            Assert.Null(dialog.Selection);
-            Assert.False(Field<TextBox>(dialog, "_notes").Enabled);
+            foreach (Control control in new Control[] { Field<CheckBox>(dialog, "_undo"),
+                Field<Button>(dialog, "_pause"), Field<Button>(dialog, "_end") })
+            {
+                Assert.True(control.Parent!.ClientRectangle.Contains(control.Bounds),
+                    $"{control.Text} extends outside its footer: {control.Bounds}, {control.Parent.ClientRectangle}");
+            }
+
+            bool inspected = false;
+            using System.Windows.Forms.Timer closer = new() { Interval = 30 };
+            closer.Tick += (_, _) =>
+            {
+                Form? details = Application.OpenForms.Cast<Form>().FirstOrDefault(form =>
+                    form.Text == "Frozen guess evidence - question dismissed");
+                if (details is null) { return; }
+                inspected = true;
+                closer.Stop();
+                Assert.False(answers.Enabled);
+                Assert.Equal(4, details.Controls.OfType<DataGridView>().Single().Rows.Count);
+                details.Close();
+            };
+            closer.Start();
+            Field<StatusStrip>(dialog, "_sources").Items[0].PerformClick();
+            Assert.True(inspected);
+            Assert.Null(Field<RoadLearningQuestion>(dialog, "_question"));
+            Assert.False(journal.CanUndo);
             dialog.Close();
+            Assert.False(session.Active);
 
             return Task.CompletedTask;
+        });
+
+    [Fact]
+    public async Task LearningQuizPersistsTapUndoPauseAndEndWithoutChangingAcquisition()
+        => await RunStaAsync(async () =>
+        {
+            string root = Path.Combine(Path.GetTempPath(), $"sensored-quiz-ui-{Guid.NewGuid():N}");
+            RoadLearningSession session = new("test-profile");
+            try
+            {
+                using RoadLearningJournal journal = new(root, session.Id);
+                List<Exception> errors = [];
+                using RoadLearningQuizDialog dialog = new(session, journal, () => true, () => null,
+                    (_, exception) => errors.Add(exception), SystemFonts.MessageBoxFont!);
+                dialog.StartPosition = FormStartPosition.Manual;
+                dialog.Location = new Point(-20000, -20000);
+                dialog.Show();
+                DateTimeOffset start = DateTimeOffset.UtcNow.AddSeconds(-32);
+                for (int tick = 0; tick <= 128; tick++)
+                {
+                    DateTimeOffset time = start.AddSeconds(tick / 4d);
+                    session.Observe(new(time, time, tick, 0, "test-vehicle", 1, LearningSource.Vehicle, Speed: 5 + tick / 4d));
+                    if (tick == 120) { dialog.Poll(time); }
+                }
+
+                dialog.Poll(start.AddSeconds(32));
+                RadioButton answer = Field<FlowLayoutPanel>(dialog, "_answers").Controls.OfType<RadioButton>()
+                    .Single(item => Equals(item.Tag, 3));
+                answer.PerformClick();
+                DateTimeOffset deadline = DateTimeOffset.UtcNow.AddSeconds(5);
+                while (!journal.CanUndo && errors.Count == 0 && DateTimeOffset.UtcNow < deadline)
+                {
+                    await Task.Delay(20, TestContext.Current.CancellationToken);
+                }
+
+                Assert.Empty(errors);
+                Assert.True(journal.CanUndo);
+                CheckBox undo = Field<CheckBox>(dialog, "_undo");
+                Assert.True(undo.Enabled);
+                undo.Checked = true;
+                while (journal.CanUndo && errors.Count == 0 && DateTimeOffset.UtcNow < deadline)
+                {
+                    await Task.Delay(20, TestContext.Current.CancellationToken);
+                }
+
+                Assert.Empty(errors);
+                Assert.False(journal.CanUndo);
+                string path = Directory.GetFiles(Path.Combine(root, session.Id.ToString("N")), "*.json").Single();
+                using JsonDocument saved = JsonDocument.Parse(await File.ReadAllTextAsync(path, TestContext.Current.CancellationToken));
+                Assert.Equal(3, saved.RootElement.GetProperty("SelectedLevel").GetInt32());
+                Assert.True(saved.RootElement.GetProperty("Retracted").GetBoolean());
+                Field<Button>(dialog, "_pause").PerformClick();
+                Assert.True(session.PausedUntil > DateTimeOffset.UtcNow.AddMinutes(4));
+                Assert.Null(Field<RoadLearningQuestion>(dialog, "_question"));
+                Field<Button>(dialog, "_end").PerformClick();
+                Assert.False(session.Active);
+            }
+            finally
+            {
+                if (Directory.Exists(root)) { Directory.Delete(root, recursive: true); }
+            }
         });
 
     [Theory]

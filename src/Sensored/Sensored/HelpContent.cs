@@ -56,13 +56,13 @@ internal static class HelpContent
 
         Raw-sensor diagnostics and GPS comparison belong to the separate **WarpSensorsDemo** diagnostic app. Sensored retains the driving dashboard, recording timeline, replay, map, and this local help.
 
-        ## Optional driving-data tasks
+        ## Opt-in road learning Quizz
 
-        Open **Driving tasks** while parked and pick one upcoming condition: parked baseline, steady straight, normal speed changes, gentle bends, straight hill, hill with bends, uneven surface or natural GPS obstruction. Read what to collect and why, add optional direction/surface/reference notes, and choose **Use task**. Then use **Start** and **Record** as usual; the guide never starts them for you.
+        After starting live acquisition, choose **Start learning Quizz** when safe. Only a passenger may interact while moving. The large window guesses a changed motion condition using a rolling 30-second context. Choose **Level 1..5**, or **0 - Wrong assessment** to reject that condition. Silence and dismissal never count as answers.
 
-        The guide is off by default. A task stays armed for recordings in this app run. A passenger may switch tasks during recording; the driver must not operate or watch the app while driving. When alone, select before driving and review after parking. Skip any unsuitable opportunity; do not make special maneuvers for a task.
+        **Disregard Last** retracts your previous answer. The arrows select a pause of **1..20 minutes**; **Pause** dismisses the current question without stopping sensing. **End Quizz** ends learning. Questions expire after ten seconds. Tapping the quiz StatusStrip opens a larger source-evidence table and discards the question as stale.
 
-        Choose **Off - unguided recording** and apply to stop task labeling without stopping recording. Cancel leaves the previous task unchanged. The recording's **MarkersV2.jsonl** stores intent-start/end labels and notes with time/input provenance. These describe expected conditions during your selection interval, not exact event boundaries, surveyed slope or sensor-verified success. Stopping recording ends the label, not a completed task.
+        Confidence is an experimental rule score, not calibrated accuracy. Motion alone cannot establish road grade, a stop sign versus a traffic light, reverse, parking intent or highway entry/exit. These conditions remain unguessed without independent evidence. Answers and frozen sensor examples are saved locally under **WARP\Sensored\RoadLearning\quiz-v1** in LocalAppData; undo preserves an explicit retraction. This is data collection, not online training. Quiz labels never change fusion calibration or physical support. **Fusion setup** and Tools/Options calibration remain available.
 
         ## Map privacy
 
