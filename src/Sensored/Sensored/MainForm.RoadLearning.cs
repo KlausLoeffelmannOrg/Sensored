@@ -64,9 +64,7 @@ public partial class MainForm
             BluetoothDevice = _options.BluetoothSensorDevice?.Id,
             Engine = (_fusionEngine as IFusionConfigurationSource)?.Configuration
         }));
-        RoadLearningJournal journal = new(Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "WARP", "Sensored", "RoadLearning", "quiz-v1"), session.Id);
+        RoadLearningJournal journal = new(RoadLearningRoot, session.Id);
         RoadLearningQuizDialog dialog = new(session, journal, () => CanRunRoadLearning,
             () => _recording?.FolderPath, (message, exception) => ShowError(message, exception), Font);
         _roadLearning = session;
@@ -84,9 +82,36 @@ public partial class MainForm
             journal.Dispose();
             UpdateRoadLearningCommand();
             SetStatusAndLog("Road learning ended. Saved labels are retained; physical fusion and calibration are unchanged.");
+            _ = ShowRoadLearningReadinessAsync(session.Id);
         };
         dialog.Show(this);
         UpdateRoadLearningCommand();
+    }
+
+    private static string RoadLearningRoot => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "WARP", "Sensored", "RoadLearning", "quiz-v1");
+
+    private async Task ShowRoadLearningReadinessAsync(Guid sessionId)
+    {
+        try
+        {
+            string root = RoadLearningRoot;
+            (RoadLearningReadinessReport report, RoadLearningStage lastStage) = await Task.Run(
+                () => (RoadLearningReadiness.Assess(root, sessionId), RoadLearningReadiness.ReadLastStage(root)));
+            if (_shutdownStarted || IsDisposed || !RoadLearningReadiness.ShouldRemind(report, lastStage))
+            {
+                return;
+            }
+
+            RoadLearningReadiness.WriteLastStage(root, (RoadLearningStage)Math.Max((int)report.Stage, (int)lastStage));
+            MessageBox.Show(this, RoadLearningReadiness.Format(report), "Road learning - data collected so far",
+                MessageBoxButtons.OK, report.Stage == RoadLearningStage.Ready ? MessageBoxIcon.Information : MessageBoxIcon.None);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            SetStatusAndLog($"Road learning summary unavailable: {exception.Message}");
+        }
     }
 
     private void ObserveRoadLearning(FusionObservation observation)

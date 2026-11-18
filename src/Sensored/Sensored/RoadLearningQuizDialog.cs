@@ -53,8 +53,8 @@ internal sealed class RoadLearningQuizDialog : Form
         _condition.Text = "Learning session started";
         _notice.Text = "Passenger use only; do not operate while driving. Waiting for 30 seconds of continuous live data.\r\n"
             + "Confidence is an experimental rule score, NOT a calibrated probability. Levels are subjective.\r\n"
-            + "No map/sign/gear data: stop signs vs lights, reverse and parking cannot be identified reliably.\r\n"
-            + "Body tilt is not road grade: hill/level-road labels await independent evidence.";
+            + "No map/sign/gear data: stop sign vs light, reverse and parking are motion-only guesses - please correct them.\r\n"
+            + "Body tilt only approximates road grade; hill levels are provisional.";
         _confidence.Text = "My guess - Confidence -- %:";
         TableLayoutPanel content = new() { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 1, Padding = new Padding(16) };
         content.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));

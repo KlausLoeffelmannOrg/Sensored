@@ -336,6 +336,79 @@ public sealed class RoadLearningTests
         return asked;
     }
 
+    [Fact]
+    public void ReadinessStaysSilentForShortErrandsAndAdvisesTrainingWhenDataIsVaried()
+    {
+        string root = Path.Combine(Path.GetTempPath(), $"sensored-readiness-{Guid.NewGuid():N}");
+        try
+        {
+            Guid errand = Guid.NewGuid();
+            for (int index = 0; index < 3; index++)
+            {
+                WriteAnswer(root, errand, RoadCondition.Braking, 2, s_start.AddMinutes(index));
+            }
+
+            RoadLearningReadinessReport small = RoadLearningReadiness.Assess(root, errand);
+            Assert.Equal(RoadLearningStage.Collecting, small.Stage);
+            Assert.False(RoadLearningReadiness.ShouldRemind(small, RoadLearningStage.Collecting));
+
+            // Five commutes on five days, six conditions each, plus a retracted and a corrupt file.
+            Guid last = Guid.Empty;
+            for (int day = 0; day < 5; day++)
+            {
+                last = Guid.NewGuid();
+                foreach (RoadCondition condition in new[] { RoadCondition.Acceleration, RoadCondition.Braking,
+                    RoadCondition.RoughRoad, RoadCondition.LeftCurve, RoadCondition.RightCurve, RoadCondition.LevelToUphill })
+                {
+                    for (int index = 0; index < 6; index++)
+                    {
+                        WriteAnswer(root, last, condition, 3, s_start.AddDays(day).AddMinutes(index * 4));
+                    }
+                }
+
+                WriteAnswer(root, last, RoadCondition.ParallelParking, 0, s_start.AddDays(day).AddMinutes(29));
+                WriteAnswer(root, last, RoadCondition.ParallelParking, 0, s_start.AddDays(day).AddMinutes(30));
+            }
+
+            WriteAnswer(root, last, RoadCondition.WavyRoad, 4, s_start.AddDays(4), retracted: true);
+            File.WriteAllText(Path.Combine(root, "broken.json"), "{");
+
+            RoadLearningReadinessReport report = RoadLearningReadiness.Assess(root, last);
+            Assert.Equal(RoadLearningStage.Ready, report.Stage);
+            Assert.Equal(183, report.Confirmed);
+            Assert.Equal(10, report.Rejected);
+            Assert.Equal(1, report.Retracted);
+            Assert.Equal(1, report.Unreadable);
+            Assert.Equal(38, report.SessionAnswers);
+            Assert.True(RoadLearningReadiness.ShouldRemind(report, RoadLearningStage.Ready));
+            Assert.Equal(6, report.TrainableConditions.Length);
+            string text = RoadLearningReadiness.Format(report);
+            Assert.Contains("first offline training run is worthwhile", text);
+            Assert.Contains("Often wrong so far (good learning targets): Parallel parking (", text);
+
+            Assert.Equal(RoadLearningStage.Collecting, RoadLearningReadiness.ReadLastStage(root));
+            RoadLearningReadiness.WriteLastStage(root, RoadLearningStage.Ready);
+            Assert.Equal(RoadLearningStage.Ready, RoadLearningReadiness.ReadLastStage(root));
+            Assert.Equal(1, RoadLearningReadiness.Assess(root, last).Unreadable);
+        }
+        finally
+        {
+            if (Directory.Exists(root)) { Directory.Delete(root, recursive: true); }
+        }
+    }
+
+    private static void WriteAnswer(string root, Guid session, RoadCondition condition, int level,
+        DateTimeOffset end, bool retracted = false)
+    {
+        RoadLearningQuestion question = new(Guid.NewGuid(), session, end.AddSeconds(-30), end, condition, 3, 60,
+            RoadLearningSession.ModelVersion, "profile", null, [], [], 0);
+        string folder = Path.Combine(root, session.ToString("N"));
+        Directory.CreateDirectory(folder);
+        File.WriteAllText(Path.Combine(folder, $"{question.Id:N}.json"), JsonSerializer.Serialize(
+            new RoadLearningAnswer(1, question, level, end.AddSeconds(1), retracted),
+            new JsonSerializerOptions { Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() } }));
+    }
+
     private static void Feed(RoadLearningSession session, double from, double through, Func<double, double> speed)
     {
         for (double seconds = from; seconds <= through; seconds += 0.25)

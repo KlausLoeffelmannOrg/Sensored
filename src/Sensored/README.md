@@ -201,7 +201,20 @@ promotion. Adjacent overlapping windows must not straddle train/test splits.
 Compare false prompts at matched coverage and check probability calibration
 before describing a score as agreement probability.
 
-There is **no online training or learned model yet**. Quiz labels never change
+There is **no online training or learned model yet**.
+
+**Training-readiness reminder.** When a quiz session ends, all saved answers are
+scanned (off the UI thread) and a summary appears only if the session was
+substantial (8+ answers spanning 15+ minutes) or overall readiness reached a new
+stage, so a short errand stays silent. It lists answers per session/day, conditions
+with enough data (20+ confirmed in 3+ sessions, so whole sessions can be held out),
+the conditions closest to that, and rules that are often rejected. A first offline
+training run is advised once 5+ conditions qualify with 150+ confirmed answers from
+4+ sessions on 3+ days. These thresholds are heuristics. The last reminded stage is
+kept in `quiz-v1\readiness-state.json`. Retracted and unreadable files are counted
+but not used.
+
+Quiz labels never change
 gravity, sensor weights, mounting or physical support. Even a future restrictive
 fusion veto needs independent replay validation; labels alone cannot justify it.
 
