@@ -13,6 +13,9 @@
     <ProjectReference Include="..\WinFormsFusionGauges.WinFormsApp\WinFormsFusionGauges.WinFormsApp.csproj" />
     <ProjectReference Include="..\..\Sensored\Sensored\Sensored.csproj" />
     <Using Include="Xunit" />
+    <None Include="..\..\Sensored\Sensored\Symbols\*.svg"
+          Link="TestData\Symbols\SensorDemo\%(Filename)%(Extension)"
+          CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(UsePackageDependency)' == 'false'">

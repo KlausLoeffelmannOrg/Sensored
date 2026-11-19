@@ -75,11 +75,12 @@ dotnet restore Sensored.slnx "-p:RestoreAdditionalProjectSources=$PWD\artifacts\
 
 ## Tests
 
-`.\build.cmd -test` runs both test suites; `pwsh -File .\eng\Test-Build.ps1`
-checks CLI parsing, operation selection, architecture handling, and safe cleaning.
+`.\build.cmd -test` runs both test suites; `FusionGauges.Tests` covers both apps.
+`pwsh -File .\eng\Test-Build.ps1` checks CLI parsing, operation selection,
+architecture handling, and safe cleaning.
 The unchanged two-case
 `FusionSetupAppTests.SensoredDrivingTasksRecordIntentBoundariesWithoutChangingAcquisitionOrFusion`
-currently hangs. It is not silently excluded by the CLI. To run the remaining 275
+currently hangs. It is not silently excluded by the CLI. To run the remaining
 tests explicitly while that existing issue is investigated:
 
 ```powershell
