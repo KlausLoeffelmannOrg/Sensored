@@ -21,7 +21,12 @@ public sealed class DemoSensorSourceFactory : ISensorSourceFactory, IAsyncDispos
     /// <summary>Creates the application-root GPS owner and independent preview interest.</summary>
     public DemoSensorSourceFactory() => _preview = new(_gpsOwner.CreateSourceView());
 
-    internal SerialNmeaGpsSource? ActiveSerialSource => _gpsOwner.CurrentSource as SerialNmeaGpsSource;
+    internal SerialNmeaGpsSource? ActiveSerialSource => _gpsOwner.CurrentSource switch
+    {
+        SerialNmeaGpsSource serial => serial,
+        ResilientGpsSource resilient => resilient.Primary as SerialNmeaGpsSource,
+        _ => null
+    };
     internal GpsPreviewSession Preview => _preview;
     internal bool IsReplay => _replaying;
     internal WindowsSensorSourceOptions? LiveOptions { get; private set; }
@@ -58,8 +63,30 @@ public sealed class DemoSensorSourceFactory : ISensorSourceFactory, IAsyncDispos
             long version = ++_configurationVersion;
             WindowsSensorSourceFactory live = new(options, _gpsOwner.CreateSourceView());
             return CompleteLiveConfigurationAsync(version, live,
-                _gpsOwner.ConfigureAsync(live.CreateGpsSelection()));
+                _gpsOwner.ConfigureAsync(CreateResilientGpsSelection(live)));
         }
+    }
+
+    /// <summary>Gets whether the serial receiver is silent and tablet location currently supplies GPS.</summary>
+    internal bool GpsFallbackActive => _gpsOwner.CurrentSource is ResilientGpsSource { FallbackActive: true };
+
+    /// <summary>Describes which GPS member is producing fixes and why the receiver is not.</summary>
+    internal string GpsDiagnostic => _gpsOwner.CurrentSource is ResilientGpsSource resilient
+        ? resilient.Diagnostic : $"GPS owner {_gpsOwner.State}";
+
+    // A serial selection becomes self-recovering and falls back to tablet location instead of retry churn.
+    private static GpsAcquisitionSelection? CreateResilientGpsSelection(WindowsSensorSourceFactory live)
+    {
+        GpsAcquisitionSelection? selection = live.CreateGpsSelection();
+        if (selection is null || live.Options.Sources != WindowsSensorSourceKind.ImuAndSerialNmeaGps)
+        {
+            return selection;
+        }
+
+        WindowsSensorSourceOptions tablet = live.Options with { Sources = WindowsSensorSourceKind.ImuAndGps };
+        Func<IGpsSource> tabletGps = new WindowsSensorSourceFactory(tablet).CreateGpsSelection()!.CreateSource;
+        return new($"resilient:{selection.Key}", () => ResilientGpsSource.CreateSerialWithTabletFallback(
+            live.Options.SerialGpsOptions, tabletGps), RetryMissing: false);
     }
 
     private async Task CompleteLiveConfigurationAsync(long version, WindowsSensorSourceFactory live, Task configuring)

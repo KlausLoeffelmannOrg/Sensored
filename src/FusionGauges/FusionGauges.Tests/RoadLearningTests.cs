@@ -8,6 +8,69 @@ public sealed class RoadLearningTests
     private static readonly DateTimeOffset s_start = DateTimeOffset.UnixEpoch;
 
     [Fact]
+    public void OneHertzGpsStartsQuestionsBetweenMeasurementTicks()
+    {
+        RoadLearningSession session = new("gps-only");
+        RoadLearningQuestion? question = null;
+        for (int second = 0; second <= 33; second++)
+        {
+            DateTimeOffset time = s_start.AddSeconds(second);
+            session.Observe(new(time, time, second, 0, "gps", 1, LearningSource.Gps, Speed: 5 + second));
+            question ??= session.TryQuestion(time.AddMilliseconds(500), null);
+        }
+
+        Assert.NotNull(question);
+        Assert.Equal(RoadCondition.Acceleration, question.Condition);
+        Assert.Equal(1d, question.Sources[(int)LearningSource.Gps].Acceleration!.Value, 5);
+    }
+
+    [Fact]
+    public void InterleavedSourceArrivalTimesDoNotRestartTheWindow()
+    {
+        RoadLearningSession session = new("interleaved");
+        RoadLearningQuestion? question = null;
+        for (int tick = 0; tick <= 132; tick++)
+        {
+            DateTimeOffset time = s_start.AddSeconds(tick / 4d);
+            session.Observe(new(time.AddMilliseconds(5), time, tick, 0, "imu", 1,
+                LearningSource.Internal, AccelerationMagnitude: 1));
+            session.Observe(new(time, time, tick, 0, "vehicle", 1,
+                LearningSource.Vehicle, Speed: 5 + tick / 4d));
+            question ??= session.TryQuestion(time.AddMilliseconds(100), null);
+        }
+
+        Assert.NotNull(question);
+        Assert.Equal(RoadCondition.Acceleration, question.Condition);
+        Assert.True(session.IsCurrent(question, s_start.AddSeconds(33.1)));
+    }
+
+    [Fact]
+    public void ProgressTracksUsableDataAndExplainsMissingSpeedAndUnrecognizedMotion()
+    {
+        RoadLearningSession session = new("progress");
+        Assert.Equal(RoadLearningWaitState.WaitingForData, session.GetProgress(s_start).State);
+        for (int second = 0; second <= 30; second++)
+        {
+            DateTimeOffset time = s_start.AddSeconds(second);
+            session.Observe(new(time, time, second, 0, "imu", 1,
+                LearningSource.Internal, AccelerationMagnitude: 1));
+            RoadLearningProgress progress = session.GetProgress(time);
+            Assert.Equal(30 - second, progress.SecondsRemaining);
+            Assert.Equal(second + 1, progress.Samples);
+        }
+
+        Assert.Equal(RoadLearningWaitState.WaitingForSpeed, session.GetProgress(s_start.AddSeconds(30)).State);
+        Feed(session, 30, 33, _ => 10);
+        Assert.Null(session.TryQuestion(s_start.AddSeconds(33), null));
+        Assert.Equal(RoadLearningWaitState.WaitingForCondition, session.GetProgress(s_start.AddSeconds(33)).State);
+        Assert.Equal(RoadLearningWaitState.WaitingForData, session.GetProgress(s_start.AddSeconds(36)).State);
+        Feed(session, 37, 38, _ => 10);
+        Assert.Equal(29, session.GetProgress(s_start.AddSeconds(38)).SecondsRemaining);
+        session.BreakContinuity();
+        Assert.Equal(RoadLearningWaitState.WaitingForData, session.GetProgress(s_start.AddSeconds(38)).State);
+    }
+
+    [Fact]
     public void ThirtySecondWindowDebouncesAndAsksOnlyDifferentConditions()
     {
         RoadLearningSession session = new("mount/source-test");
@@ -269,6 +332,112 @@ public sealed class RoadLearningTests
         {
             Assert.DoesNotContain(other, asked);
         }
+    }
+
+    [Theory]
+    [InlineData(-4.5)]
+    [InlineData(2.5)]
+    public void GpsOnASkewedReceiverClockStillSuppliesSpeed(double receiverClockOffsetSeconds)
+    {
+        RoadLearningSession session = new("skewed-gps");
+        RoadLearningQuestion? question = null;
+        for (int tick = 0; tick <= 132; tick++)
+        {
+            DateTimeOffset time = s_start.AddSeconds(tick / 4d);
+            session.Observe(new(time.AddMilliseconds(300), time.AddSeconds(receiverClockOffsetSeconds), tick, 0, "gps", 1,
+                LearningSource.Gps, Speed: 5 + tick / 4d));
+            question ??= session.TryQuestion(time.AddMilliseconds(400), null);
+        }
+
+        Assert.NotNull(question);
+        Assert.Equal(RoadCondition.Acceleration, question.Condition);
+        Assert.Equal(1d, question.Sources[(int)LearningSource.Gps].Acceleration!.Value, 3);
+    }
+
+    [Fact]
+    public void GpsCourseRateReplacesUnsupportedFusionLateral()
+    {
+        RoadLearningQuestion? question = DriveUnsupportedFusion(
+            t => t < 35 ? 90 : 90 + (t - 35) * 6, _ => 100, out HashSet<RoadCondition> asked, RoadCondition.RightCurve);
+
+        Assert.Contains(RoadCondition.RightCurve, asked);
+        Assert.DoesNotContain(RoadCondition.LeftCurve, asked);
+        Assert.True(question!.Sources[(int)LearningSource.Gps].Contribution > 0);
+        Assert.Equal(0, question.Sources[(int)LearningSource.Internal].Contribution);
+    }
+
+    [Fact]
+    public void DampedGpsAltitudeGradeReplacesUnsupportedFusionPitch()
+    {
+        RoadLearningQuestion? question = DriveUnsupportedFusion(
+            _ => 90, t => t < 40 ? 100 : 100 + 15 * (t - 40) * 0.08, out HashSet<RoadCondition> asked, RoadCondition.LevelToUphill);
+
+        Assert.Contains(RoadCondition.LevelToUphill, asked);
+        Assert.Contains("altitude", question!.Sources[(int)LearningSource.Gps].Explanation, StringComparison.Ordinal);
+        Assert.Equal(0, question.Sources[(int)LearningSource.Internal].Contribution);
+    }
+
+    [Fact]
+    public void BreakingOneSourceKeepsTheOtherSourcesWindow()
+    {
+        RoadLearningSession session = new("per-source");
+        for (int tick = 0; tick <= 120; tick++)
+        {
+            DateTimeOffset time = s_start.AddSeconds(tick / 4d);
+            session.Observe(new(time, time, tick, 0, "vehicle", 1, LearningSource.Vehicle, Speed: 5 + tick / 4d));
+            session.Observe(new(time, time, tick, 0, "gps", 1, LearningSource.Gps, Speed: 5 + tick / 4d));
+        }
+
+        Assert.False(session.BreakSourceContinuity("missing-receiver", "Retrying a receiver that never delivered."));
+        Assert.Equal(0, session.ContinuityBreaks);
+        Assert.True(session.BreakSourceContinuity("gps", "Receiver replaced."));
+        Assert.Equal(1, session.ContinuityBreaks);
+
+        Feed(session, 30.25, 30.25, seconds => 5 + seconds);
+        Assert.Null(session.TryQuestion(s_start.AddSeconds(30.25), null));
+        Feed(session, 30.5, 32.5, seconds => 5 + seconds);
+        RoadLearningQuestion question = Assert.IsType<RoadLearningQuestion>(session.TryQuestion(s_start.AddSeconds(32.5), null));
+        Assert.Equal(RoadCondition.Acceleration, question.Condition);
+        Assert.True(question.Sources[(int)LearningSource.Vehicle].Samples > 100);
+        Assert.Equal(0, question.Sources[(int)LearningSource.Gps].Samples);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void NoisyStandstillIsFoundByEscalatingDamping(bool spikes)
+    {
+        // The receiver never reports below the raw stop speed at standstill: a smooth jitter floor, or a floor
+        // with one-second spikes that only median damping removes. Both are noise, not driving.
+        HashSet<RoadCondition> asked = Drive(t => (t < 20 ? 10 : t < 24 ? 10 - 2.5 * (t - 20)
+            : spikes ? ((int)t % 3 == 0 ? 1.3 : 0.75) : 0.8 + 0.1 * Math.Sin(t), 0, 0, 0, null), 50);
+
+        Assert.Contains(RoadCondition.WaitingAtTrafficLight, asked);
+        Assert.DoesNotContain(RoadCondition.StopAndGo, asked);
+    }
+
+    private static RoadLearningQuestion? DriveUnsupportedFusion(Func<double, double> course, Func<double, double> altitude,
+        out HashSet<RoadCondition> asked, RoadCondition wanted)
+    {
+        RoadLearningSession session = new("unsupported-fusion");
+        RoadLearningQuestion? found = null;
+        asked = [];
+        for (int tick = 0; tick <= 280; tick++)
+        {
+            double seconds = tick / 4d;
+            DateTimeOffset time = s_start.AddSeconds(seconds);
+            session.Observe(new(time, time, tick, 0, "vehicle", 1, LearningSource.Vehicle, Speed: 15));
+            session.Observe(new(time, time, tick, 0, "imu", 1, LearningSource.Internal, AccelerationMagnitude: 1));
+            session.Observe(new(time, time, tick, 0, "gps", 1, LearningSource.Gps, Speed: 15,
+                GpsCourseDegrees: course(seconds) % 360, GpsAltitudeMeters: altitude(seconds)));
+            if (tick % 2 == 0 && session.TryQuestion(time, null) is { } question)
+            {
+                asked.Add(question.Condition);
+                if (question.Condition == wanted) { found ??= question; }
+            }
+        }
+
+        return found;
     }
 
     [Fact]

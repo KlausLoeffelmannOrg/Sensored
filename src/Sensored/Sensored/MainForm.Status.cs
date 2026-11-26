@@ -194,7 +194,10 @@ public partial class MainForm
 
         DemoOptions? source = _lease is not null ? _runningSourceOptions : null;
         string? port = _sensorSourceFactory?.ActiveSerialSource?.ActivePort?.PortName ?? source?.SerialPortName;
-
+        if (source?.SourceKind == WindowsSensorSourceKind.ImuAndSerialNmeaGps && _sensorSourceFactory?.GpsFallbackActive == true)
+        {
+            return "Tablet GPS (serial fallback)";
+        }
         return source?.SourceKind switch
         {
             WindowsSensorSourceKind.ImuAndGps => "Internal GPS",

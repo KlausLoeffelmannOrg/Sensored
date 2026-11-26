@@ -32,6 +32,9 @@ public partial class MainForm
     }
 
     private void OnRoadLearningCommand(object? sender, EventArgs e)
+        => StartRoadLearning(confirmPassenger: true);
+
+    private void StartRoadLearning(bool confirmPassenger)
     {
         if (_roadQuizDialog is { IsDisposed: false } existing)
         {
@@ -44,7 +47,7 @@ public partial class MainForm
             return;
         }
 
-        if (MessageBox.Show(this,
+        if (confirmPassenger && MessageBox.Show(this,
             "Only a passenger may answer while the vehicle is moving. Do not interact with this quiz as the driver.\r\n\r\n"
             + "The quiz saves the last 30 seconds of sensor evidence with each answer locally. "
             + "Experimental confidence is not calibrated accuracy. Fusion and calibration stay unchanged.\r\n\r\n"
@@ -64,7 +67,7 @@ public partial class MainForm
             BluetoothDevice = _options.BluetoothSensorDevice?.Id,
             Engine = (_fusionEngine as IFusionConfigurationSource)?.Configuration
         }));
-        RoadLearningJournal journal = new(RoadLearningRoot, session.Id);
+        RoadLearningJournal journal = new(_automation?.LabelsPath ?? RoadLearningRoot, session.Id);
         RoadLearningQuizDialog dialog = new(session, journal, () => CanRunRoadLearning,
             () => _recording?.FolderPath, (message, exception) => ShowError(message, exception), Font);
         _roadLearning = session;
@@ -82,7 +85,7 @@ public partial class MainForm
             journal.Dispose();
             UpdateRoadLearningCommand();
             SetStatusAndLog("Road learning ended. Saved labels are retained; physical fusion and calibration are unchanged.");
-            _ = ShowRoadLearningReadinessAsync(session.Id);
+            if (_automation is null) { _ = ShowRoadLearningReadinessAsync(session.Id); }
         };
         dialog.Show(this);
         UpdateRoadLearningCommand();
@@ -124,7 +127,18 @@ public partial class MainForm
         SensorEnvelope input = observation.Input;
         if (input.Kind is SensorDataKind.Gap or SensorDataKind.SourceTransition)
         {
-            session.BreakContinuity();
+            string reason = $"{input.Kind}: {(object?)input.SourceTransition ?? input.SourceId}";
+            string? sourceId = input.SourceTransition?.SourceId ?? input.SourceId;
+            if (sourceId is null)
+            {
+                session.BreakContinuity(reason);
+            }
+            else
+            {
+                // Only the affected producer restarts; a missing receiver's retries cost nothing.
+                session.BreakSourceContinuity(sourceId, reason);
+            }
+
             return;
         }
 
@@ -133,7 +147,9 @@ public partial class MainForm
         {
             session.Observe(new(input.ArrivalTimestamp, gps.CoordinateTimestamp, input.Sequence, observation.Epoch,
                 input.SourceId ?? "GPS", input.SourceGeneration, LearningSource.Gps, Speed: gps.SpeedMetersPerSecond,
-                GpsCourseDegrees: double.IsFinite(gps.CourseDegrees) ? gps.CourseDegrees : null));
+                GpsCourseDegrees: double.IsFinite(gps.CourseDegrees) ? gps.CourseDegrees : null,
+                GpsAltitudeMeters: double.IsFinite(gps.AltitudeMeters)
+                    && !(gps.VerticalAccuracyMeters > 30) ? gps.AltitudeMeters : null));
         }
 
         if (input.Kind == SensorDataKind.OBD2 && input.VehicleTelemetry is { Connected: true } vehicle)

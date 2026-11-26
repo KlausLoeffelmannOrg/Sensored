@@ -1468,6 +1468,98 @@ public sealed class FusionSetupAppTests
             return Task.CompletedTask;
         });
 
+    [Fact]
+    public async Task LearningQuizCentersOnScreenAndCountsDownToTheFirstGpsQuestion()
+        => await RunStaAsync(async () =>
+        {
+            RoadLearningSession session = new("gps-only");
+            using RoadLearningJournal journal = new(Path.GetTempPath(), session.Id);
+            using RoadLearningQuizDialog dialog = new(session, journal, () => true, () => null,
+                (_, exception) => throw exception, SystemFonts.MessageBoxFont!);
+            TaskCompletionSource shown = new();
+            dialog.Shown += (_, _) => shown.SetResult();
+            dialog.Show();
+            await shown.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+            Rectangle area = Screen.FromControl(dialog).WorkingArea;
+            Assert.Equal((int)(area.Width * 0.7), dialog.Width);
+            Assert.Equal((int)(area.Height * 0.7), dialog.Height);
+            Assert.Equal(area.Left + (area.Width - dialog.Width) / 2, dialog.Left);
+            Assert.Equal(area.Top + (area.Height - dialog.Height) / 2, dialog.Top);
+            Label condition = Field<Label>(dialog, "_condition");
+            Assert.Contains("Waiting for live sensor data", condition.Text);
+            DateTimeOffset start = DateTimeOffset.UtcNow;
+            for (int second = 0; second <= 33; second++)
+            {
+                DateTimeOffset time = start.AddSeconds(second);
+                session.Observe(new(time, time, second, 0, "gps", 1, LearningSource.Gps, Speed: 5 + second));
+                dialog.Poll(time.AddMilliseconds(500));
+                if (second < 30)
+                {
+                    Assert.Contains($"{30 - second} seconds remaining", condition.Text);
+                    Assert.False(Field<FlowLayoutPanel>(dialog, "_answers").Enabled);
+                }
+                else if (second == 30)
+                {
+                    Assert.Contains("confirming a detected condition", condition.Text);
+                }
+            }
+
+            Assert.True(Field<FlowLayoutPanel>(dialog, "_answers").Enabled);
+            Assert.Contains("acceleration", condition.Text);
+        });
+
+    [Fact]
+    public async Task AutomationAnswersOnlyTheExpectedLiveQuestionAndIsolatesLabels()
+        => await RunStaAsync(async () =>
+        {
+            string root = Path.Combine(Path.GetTempPath(), $"sensored-automation-ui-{Guid.NewGuid():N}");
+            await using SensorService service = CreateService();
+            using Sensored.MainForm form = new(service);
+            await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                form.ExecuteAutomationCommandAsync(new(Guid.NewGuid(), "start-quiz")));
+            try
+            {
+                form.ConfigureAutomation(root);
+                await form.ExecuteAutomationCommandAsync(new(Guid.NewGuid(), "start-session"));
+                Assert.Equal(1, service.ActiveSessionCount);
+                await form.ExecuteAutomationCommandAsync(new(Guid.NewGuid(), "start-quiz"));
+                RoadLearningSession session = Field<RoadLearningSession>(form, "_roadLearning");
+                RoadLearningQuizDialog dialog = Field<RoadLearningQuizDialog>(form, "_roadQuizDialog");
+                RoadLearningJournal journal = Field<RoadLearningJournal>(dialog, "_journal");
+                DateTimeOffset start = DateTimeOffset.UtcNow.AddSeconds(-32);
+                for (int tick = 0; tick <= 128; tick++)
+                {
+                    DateTimeOffset time = start.AddSeconds(tick / 4d);
+                    session.Observe(new(time, time, tick, 0, "test-vehicle", 1, LearningSource.Vehicle, Speed: 5 + tick / 4d));
+                    if (tick >= 120) { dialog.Poll(time); }
+                }
+
+                RoadLearningQuestion question = Field<RoadLearningQuestion>(dialog, "_question");
+                Assert.NotNull(question);
+                await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                    form.ExecuteAutomationCommandAsync(new(Guid.NewGuid(), "answer", Guid.NewGuid(), 2)));
+                await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() =>
+                    form.ExecuteAutomationCommandAsync(new(Guid.NewGuid(), "answer", question.Id, 6)));
+                Assert.False(journal.CanUndo);
+                await form.ExecuteAutomationCommandAsync(new(Guid.NewGuid(), "answer", question.Id, 2));
+                Assert.True(journal.CanUndo);
+                Assert.Single(Directory.GetFiles(Path.Combine(root, "quiz-labels"), "*.json", SearchOption.AllDirectories));
+                await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                    form.ExecuteAutomationCommandAsync(new(Guid.NewGuid(), "answer", question.Id, 2)));
+                await Assert.ThrowsAsync<ArgumentException>(() =>
+                    form.ExecuteAutomationCommandAsync(new(Guid.NewGuid(), "unknown")));
+                await form.ExecuteAutomationCommandAsync(new(Guid.NewGuid(), "stop-session"));
+                Assert.False(session.Active);
+                Assert.Equal(0, service.ActiveSessionCount);
+            }
+            finally
+            {
+                await InvokeTask(form, "StopSensorSessionAsync");
+                form.Dispose();
+                if (Directory.Exists(root)) { Directory.Delete(root, recursive: true); }
+            }
+        });
+
     [Theory]
     [InlineData(9f)]
     [InlineData(12f)]

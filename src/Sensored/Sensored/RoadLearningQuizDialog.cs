@@ -44,7 +44,7 @@ internal sealed class RoadLearningQuizDialog : Form
         Text = "Road learning Quizz - passenger use only";
         Name = nameof(RoadLearningQuizDialog);
         AutoScaleMode = AutoScaleMode.Dpi;
-        StartPosition = FormStartPosition.CenterParent;
+        StartPosition = FormStartPosition.CenterScreen;
         Size = new Size(1100, 850);
         MinimumSize = new Size(680, 500);
         ShowInTaskbar = false;
@@ -129,10 +129,22 @@ internal sealed class RoadLearningQuizDialog : Form
 
     protected override void OnShown(EventArgs e)
     {
-        base.OnShown(e);
-        Rectangle area = Screen.FromControl(this).WorkingArea;
+        Rectangle area = Screen.FromControl(Owner ?? this).WorkingArea;
         MinimumSize = new Size(Math.Min(MinimumSize.Width, area.Width), Math.Min(MinimumSize.Height, area.Height));
-        Size = new Size(Math.Min(Width, area.Width), Math.Min(Height, area.Height));
+        if (StartPosition != FormStartPosition.Manual)
+        {
+            Size target = new((int)(area.Width * 0.7), (int)(area.Height * 0.7));
+            MinimumSize = new Size(Math.Min(MinimumSize.Width, target.Width), Math.Min(MinimumSize.Height, target.Height));
+            Bounds = new Rectangle(area.Left + (area.Width - target.Width) / 2,
+                area.Top + (area.Height - target.Height) / 2, target.Width, target.Height);
+        }
+        else
+        {
+            Size = new Size(Math.Min(Width, area.Width), Math.Min(Height, area.Height));
+        }
+
+        Poll(DateTimeOffset.UtcNow);
+        base.OnShown(e);
     }
 
     internal void Poll(DateTimeOffset now)
@@ -160,8 +172,14 @@ internal sealed class RoadLearningQuizDialog : Form
             return;
         }
 
-        if (_question is not null || _session.TryQuestion(now, _recordingPath()) is not { } question)
+        if (_question is not null)
         {
+            return;
+        }
+
+        if (_session.TryQuestion(now, _recordingPath()) is not { } question)
+        {
+            UpdateProgress(now);
             return;
         }
 
@@ -191,6 +209,29 @@ internal sealed class RoadLearningQuizDialog : Form
         }
     }
 
+    private void UpdateProgress(DateTimeOffset now)
+    {
+        RoadLearningProgress progress = _session.GetProgress(now);
+        _condition.Text = progress.State switch
+        {
+            RoadLearningWaitState.WaitingForData => "Waiting for live sensor data - 30 seconds remaining",
+            RoadLearningWaitState.Collecting => $"Collecting live sensor data - {progress.SecondsRemaining} seconds remaining",
+            RoadLearningWaitState.WaitingForSpeed => "Quiz running - waiting for GPS or OBD2 speed",
+            RoadLearningWaitState.ConflictingSpeed => "Quiz running - GPS and OBD2 speed evidence disagree",
+            RoadLearningWaitState.ConfirmingCondition => "Quiz running - confirming a detected condition",
+            RoadLearningWaitState.WaitingForDifferentCondition => "Quiz running - waiting for a different condition",
+            _ => "Quiz running - waiting for a recognizable motion condition"
+        };
+        _notice.Text = progress.State switch
+        {
+            RoadLearningWaitState.WaitingForData => "No fresh usable samples. Check live acquisition; the countdown restarts after a data gap.",
+            RoadLearningWaitState.WaitingForSpeed => "The 30-second context is ready, but motion rules need fresh measured speed. Check the GPS fix or OBD2 connection.",
+            RoadLearningWaitState.ConflictingSpeed => "The 30-second context is ready. Questions are withheld until the speed sources agree.",
+            _ => $"{progress.Samples} usable samples in the rolling 30-second context. Questions appear after a condition remains stable for 2 seconds."
+        };
+        _notice.Text += "\r\nPassenger use only; do not operate while driving. Confidence is an experimental rule score, not calibrated accuracy.";
+    }
+
     private async void OnAnswer(object? sender, EventArgs e)
     {
         if (_busy || _question is not { } question || sender is not RadioButton { Tag: int level })
@@ -204,9 +245,56 @@ internal sealed class RoadLearningQuizDialog : Form
             return;
         }
 
-        await PersistAsync(() => _journal.AnswerAsync(question, level, DateTimeOffset.UtcNow),
-            () => DismissQuestion("Answer saved. Waiting for a different condition.")).ConfigureAwait(true);
+        await SaveAnswerAsync(question, level).ConfigureAwait(true);
     }
+
+    internal object GetAutomationState() => new
+    {
+        Active = _session.Active,
+        ContinuityBreaks = _session.ContinuityBreaks,
+        LastContinuityBreak = _session.LastContinuityBreak,
+        Condition = _condition.Text,
+        Notice = _notice.Text,
+        Busy = _busy,
+        CanAnswer = _answers.Enabled && _question is { } current && _session.IsCurrent(current, DateTimeOffset.UtcNow),
+        Question = _question is { } question ? new
+        {
+            question.Id,
+            Condition = question.Condition.ToString(),
+            question.Level,
+            question.Confidence,
+            question.End,
+            ExpiresAt = question.End + RoadLearningSession.QuestionLifetime,
+            Sources = question.Sources.Select(source => new
+            {
+                source.Abbreviation, source.Sensors, source.Samples, source.Speed, source.Acceleration,
+                source.Contribution, source.Explanation
+            }),
+            SampleLagSeconds = question.Samples.GroupBy(sample => sample.Source).ToDictionary(
+                group => group.Key.ToString(),
+                group => Math.Round(group.Average(sample => (sample.ReceivedAt - sample.MeasuredAt).TotalSeconds), 2))
+        } : null
+    };
+
+    internal async Task AnswerAsync(Guid questionId, int level)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(level, 0);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(level, 5);
+        if (_busy || _detailsOpen || _question is not { } question || question.Id != questionId
+            || !_session.IsCurrent(question, DateTimeOffset.UtcNow))
+        {
+            throw new InvalidOperationException("The requested quiz question is unavailable, expired or changed.");
+        }
+
+        if (!await SaveAnswerAsync(question, level).ConfigureAwait(true))
+        {
+            throw new IOException("The quiz answer was not saved; see the quiz error notice.");
+        }
+    }
+
+    private Task<bool> SaveAnswerAsync(RoadLearningQuestion question, int level)
+        => PersistAsync(() => _journal.AnswerAsync(question, level, DateTimeOffset.UtcNow),
+            () => DismissQuestion("Answer saved. Waiting for a different condition."));
 
     private async void OnUndo(object? sender, EventArgs e)
     {
@@ -220,7 +308,7 @@ internal sealed class RoadLearningQuizDialog : Form
         if (!IsDisposed) { _undo.Checked = false; }
     }
 
-    private async Task PersistAsync(Func<Task> write, Action success)
+    private async Task<bool> PersistAsync(Func<Task> write, Action success)
     {
         _busy = true;
         _answers.Enabled = false;
@@ -231,11 +319,13 @@ internal sealed class RoadLearningQuizDialog : Form
             _pendingWrite = write();
             await _pendingWrite.ConfigureAwait(true);
             success();
+            return true;
         }
         catch (Exception exception)
         {
             _notice.Text = $"NOT SAVED: {exception.Message}";
             _reportError("Road learning answer was not saved; retry before the question expires", exception);
+            return false;
         }
         finally
         {

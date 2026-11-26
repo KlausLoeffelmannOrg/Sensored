@@ -59,7 +59,9 @@ public partial class MainForm
 
         try
         {
-            _fusionLearning = FusionLearningStore.Open(Path.Combine(
+            _fusionLearning = FusionLearningStore.Open(_automation is { } automation
+                ? Path.Combine(automation.DirectoryPath, "fusion-evidence.json")
+                : Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                 "WARP", "Sensored", "FusionLearning", "evidence-v1.json"));
             if (_fusionLearning.HasLegacySequenceRanges)

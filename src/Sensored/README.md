@@ -148,6 +148,18 @@ Reported percentages are **experimental rule scores/evidence shares, not
 calibrated probabilities or independent gains in accuracy**. RPM, gyro and
 supported body pitch are retained as context, not assumed to establish a class.
 
+GPS acquisition probes available serial NMEA receivers if the configured port is
+missing, and uses the tablet's Windows location provider while serial fixes are
+stale or unavailable. Vehicle/OBD speed remains an independent speed source when
+GPS has coordinates but no speed. The quiz aligns a drifting source clock to
+arrival time while preserving measurement spacing, and a source reconnect drops
+only that source's samples rather than restarting the other sensors' window.
+Near-zero speed detection increases median damping and its stop threshold only
+when the raw stream fails to reveal a standstill. If fusion pitch/lateral support
+expires during a drive, the quiz can estimate lateral acceleration from GPS
+course rate and speed, and grade from damped GPS altitude versus travelled
+distance. These are quiz-only fallbacks; they do not alter fusion or calibration.
+
 The cold-start interpreter (`road-rules-v1`) covers the whole catalogue with
 explainable motion rules over the 30-second window:
 
@@ -156,8 +168,8 @@ explainable motion rules over the 30-second window:
 | Rough / wavy road | IMU magnitude variability; 1 s means separate waves | vibration |
 | Acceleration / braking | source-time speed slope (vehicle, else GPS) | m/s² |
 | Emergency braking | speed drop > 5.5 m/s² in the last 4 s | none |
-| Level→uphill/downhill, downhill↔uphill | supported pitch, first 10 s vs last 5 s | grade (level→hill only) |
-| Up/downhill + left/right curve | supported lateral acceleration + pitch | driving style |
+| Level→uphill/downhill, downhill↔uphill | supported pitch or damped GPS altitude grade | grade (level→hill only) |
+| Up/downhill + left/right curve | supported lateral acceleration or GPS course-rate estimate, plus pitch/grade | driving style |
 | Starting off uphill / level start | start from standstill + pitch | grade / acceleration |
 | Stopping uphill / braking to standstill up/downhill / level | stop + pitch; gentle (< 1.5 m/s²) vs braking | grade / deceleration |
 | Waiting at traffic light | stopped ≥ 12 s after moving | none |
@@ -185,8 +197,9 @@ samples from the last 30 seconds with original timestamps, sequence, epoch and
 generation. Undo preserves the original example with `Retracted: true`.
 Level zero is a rejected guess, not a corrected class or a negative for other
 classes. Storage errors are reported, not counted as saved answers.
-Gaps, source/generation/epoch changes and clock discontinuities require a fresh
-window. Replay does not collect quiz examples. Historical `driving-task-v1`
+An epoch change or a long data gap restarts the full window; a source/generation
+change or source-local timestamp discontinuity drops only that source's samples.
+Replay does not collect quiz examples. Historical `driving-task-v1`
 recording markers and `FusionLearning\evidence-v1.json` remain compatible; legacy
 evidence is retained separately and is not imported as training truth.
 
@@ -217,6 +230,61 @@ but not used.
 Quiz labels never change
 gravity, sensor weights, mounting or physical support. Even a future restrictive
 fusion veto needs independent replay validation; labels alone cannot justify it.
+
+### Local UI automation
+
+Launch with `--automation <new-run-directory>` to start the configured **live**
+sensor session and open the quiz automatically. Use only while parked or with a
+passenger operating the app. This explicit opt-in replaces the quiz consent
+dialog for that run; normal launches retain all prompts and manual startup.
+
+```powershell
+$run = Join-Path $PWD 'artifacts\automation\run-001'
+dotnet run --project src\Sensored\Sensored -p:UsePackageDependency=false -- --automation $run
+```
+
+The directory must be new or empty. `status.json` updates approximately once per
+second with process ID, session state, errors, quiz text, current question ID,
+expiry and `CanAnswer`. PNGs of the main and quiz windows are saved approximately
+every **10 seconds**; `Screenshots` in the status lists the latest paths. Capture
+uses the application window handles, not the desktop or overlapping applications.
+Keep the windows restored, not minimized. Native/DirectX content may not appear in
+window captures; the quiz text and status remain available in `status.json`.
+Screenshots accumulate until the app exits; they can contain sensitive live
+location/device information, so keep the run directory private.
+
+Automation labels and legacy fusion evidence stay under the run directory
+(`quiz-labels` and `fusion-evidence.json`), separate from normal training data.
+Automatic recording is disabled for the run. GPS acquisition uses the configured
+source, but automated startup does **not** send receiver configuration commands.
+Errors go to the usual log/history and `status.json`, rather than blocking on
+error message boxes. Missing hardware is reported, not replaced with simulated
+data, and no answer is ever chosen automatically.
+
+Commands use the same session and quiz operations as the UI:
+
+```powershell
+$run = Join-Path $PWD 'artifacts\automation\run-001'
+$status = Get-Content "$run\status.json" -Raw | ConvertFrom-Json
+# Inspect the screenshot and current status before choosing a subjective answer.
+.\eng\Send-AppCommand.ps1 -RunDirectory $run -Action answer -QuestionId $status.State.Quiz.Question.Id -Level 2
+.\eng\Send-AppCommand.ps1 -RunDirectory $run -Action end-quiz
+.\eng\Send-AppCommand.ps1 -RunDirectory $run -Action start-quiz
+.\eng\Send-AppCommand.ps1 -RunDirectory $run -Action stop-session
+.\eng\Send-AppCommand.ps1 -RunDirectory $run -Action start-session
+.\eng\Send-AppCommand.ps1 -RunDirectory $run -Action close
+```
+
+An answer must reference the exact, still-current question; stale, duplicate or
+out-of-range answers fail without a label. Ten-second screenshot intervals can
+miss a question's ten-second lifetime, so re-read `CanAnswer`/expiry before acting.
+`close` uses normal asynchronous cleanup and releases the sensors.
+
+For other local clients, atomically rename a UTF-8 JSON file to `command.json`:
+`{"Id":"<unique-guid>","Action":"answer","QuestionId":"<current-guid>","Level":2}`.
+Send one command at a time and wait for `result.json` with the matching ID and
+`Success: true`. Errors include an explicit `Success: false` and message. This
+interface exists only for opt-in runs; it opens no network listener.
 
 The root `Sensored.slnx` uses WARP NuGets; `Sensored.Dev.slnx` uses sibling WARP projects.
 The executable project is `src\Sensored\Sensored\Sensored.csproj`.

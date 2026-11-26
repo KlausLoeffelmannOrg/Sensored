@@ -76,7 +76,8 @@ internal sealed record RoadLearningSample(
     double? AngularRateMagnitude = null, double? SupportedPitch = null,
     double? SupportedLateralAcceleration = null,
     Vec3? AccelerationVectorG = null, Vec3? AngularRateVectorDegreesPerSecond = null,
-    double? GpsCourseDegrees = null, double? SupportedLongitudinalAcceleration = null);
+    double? GpsCourseDegrees = null, double? SupportedLongitudinalAcceleration = null,
+    double? GpsAltitudeMeters = null);
 
 internal sealed record RoadSourceEvidence(
     string Abbreviation, string Sensors, int Samples, double? Speed, double? Acceleration,
@@ -89,6 +90,14 @@ internal sealed record RoadLearningQuestion(
     string Profile, string? RecordingPath, RoadSourceEvidence[] Sources, RoadLearningSample[] Samples,
     long Continuity);
 
+internal enum RoadLearningWaitState
+{
+    WaitingForData, Collecting, WaitingForSpeed, ConflictingSpeed,
+    ConfirmingCondition, WaitingForCondition, WaitingForDifferentCondition
+}
+
+internal sealed record RoadLearningProgress(RoadLearningWaitState State, int SecondsRemaining, int Samples);
+
 /// <summary>Opt-in shadow interpretation; answers never change physical fusion or calibration.</summary>
 internal sealed class RoadLearningSession
 {
@@ -99,6 +108,8 @@ internal sealed class RoadLearningSession
     private readonly Queue<RoadLearningSample> _samples = new();
     private readonly Dictionary<LearningSource, (string Id, long Generation)> _identities = [];
     private readonly Dictionary<LearningSource, DateTimeOffset> _lastSample = [];
+    private readonly Dictionary<LearningSource, DateTimeOffset> _lastArrival = [];
+    private readonly Dictionary<LearningSource, Queue<double>> _clockLags = [];
     private DateTimeOffset? _startedWindow;
     private DateTimeOffset? _lastReceived;
     private int? _epoch;
@@ -108,6 +119,7 @@ internal sealed class RoadLearningSession
     private DateTimeOffset _pausedUntil;
     private bool _active = true;
     private long _continuity;
+    private string? _lastContinuityBreak;
 
     internal RoadLearningSession(string profile)
     {
@@ -118,6 +130,37 @@ internal sealed class RoadLearningSession
     internal string Profile { get; }
     internal bool Active { get { lock (_gate) { return _active; } } }
     internal DateTimeOffset PausedUntil { get { lock (_gate) { return _pausedUntil; } } }
+    internal long ContinuityBreaks { get { lock (_gate) { return _continuity; } } }
+    internal string? LastContinuityBreak { get { lock (_gate) { return _lastContinuityBreak; } } }
+    internal RoadLearningProgress GetProgress(DateTimeOffset now)
+    {
+        lock (_gate)
+        {
+            RoadLearningSample[] samples = CurrentSamples(now);
+            if (samples.Length == 0 || now - samples.Max(sample => sample.ReceivedAt) > TimeSpan.FromSeconds(2))
+            {
+                return new(RoadLearningWaitState.WaitingForData, (int)Window.TotalSeconds, samples.Length);
+            }
+
+            int remaining = (int)Math.Ceiling(Math.Max(0, (Window - (now - _startedWindow!.Value)).TotalSeconds));
+            if (remaining > 0)
+            {
+                return new(RoadLearningWaitState.Collecting, remaining, samples.Length);
+            }
+
+            RoadSourceEvidence[] evidence = BuildEvidence(samples, now);
+            RoadSourceEvidence gps = evidence[(int)LearningSource.Gps];
+            RoadSourceEvidence vehicle = evidence[(int)LearningSource.Vehicle];
+            RoadLearningWaitState state = gps.Speed is null && vehicle.Speed is null
+                ? RoadLearningWaitState.WaitingForSpeed
+                : SpeedSourcesConflict(gps, vehicle) ? RoadLearningWaitState.ConflictingSpeed
+                : _candidate is not null ? RoadLearningWaitState.ConfirmingCondition
+                : _lastAsked is not null ? RoadLearningWaitState.WaitingForDifferentCondition
+                : RoadLearningWaitState.WaitingForCondition;
+            return new(state, 0, samples.Length);
+        }
+    }
+
     internal bool IsCurrent(RoadLearningQuestion question, DateTimeOffset now)
     {
         lock (_gate)
@@ -134,7 +177,7 @@ internal sealed class RoadLearningSession
         lock (_gate)
         {
             _active = false;
-            ResetWindow();
+            ResetWindow("Session ended.");
         }
     }
 
@@ -149,21 +192,95 @@ internal sealed class RoadLearningSession
         }
     }
 
-    internal void BreakContinuity()
+    internal void BreakContinuity(string reason = "Sensor continuity interrupted.")
     {
-        lock (_gate) { ResetWindow(); }
+        lock (_gate) { ResetWindow(reason); }
     }
 
-    private void ResetWindow()
+    /// <summary>
+    ///  Drops only one producer's history; other sources keep the collected window. A source that has
+    ///  contributed no sample (for example a missing receiver retrying) changes nothing.
+    /// </summary>
+    internal bool BreakSourceContinuity(string sourceId, string reason)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(sourceId);
+        lock (_gate)
+        {
+            LearningSource[] affected = [.. _identities.Where(pair => pair.Value.Id == sourceId).Select(pair => pair.Key)];
+            return affected.Length > 0 && ResetSources(affected, reason);
+        }
+    }
+
+    private bool ResetSources(IReadOnlyCollection<LearningSource> sources, string reason)
+    {
+        int before = _samples.Count;
+        RoadLearningSample[] kept = [.. _samples.Where(sample => !sources.Contains(sample.Source))];
+        _samples.Clear();
+        foreach (RoadLearningSample sample in kept)
+        {
+            _samples.Enqueue(sample);
+        }
+
+        foreach (LearningSource source in sources)
+        {
+            _identities.Remove(source);
+            _lastSample.Remove(source);
+            _lastArrival.Remove(source);
+            _clockLags.Remove(source);
+        }
+
+        if (kept.Length == before)
+        {
+            return false;
+        }
+
+        _continuity++;
+        _lastContinuityBreak = reason;
+        _candidate = null;
+        if (kept.Length == 0)
+        {
+            _startedWindow = null;
+        }
+
+        return true;
+    }
+
+    private void ResetWindow(string reason)
     {
         _continuity++;
+        _lastContinuityBreak = reason;
         _samples.Clear();
         _identities.Clear();
         _lastSample.Clear();
+        _lastArrival.Clear();
+        _clockLags.Clear();
         _startedWindow = null;
         _lastReceived = null;
         _epoch = null;
         _candidate = null;
+    }
+
+    /// <summary>
+    ///  Maps a source whose clock differs from the local arrival clock (for example GNSS UTC on a tablet
+    ///  with a skewed clock, or NMEA output latency) onto arrival time. The minimum recent lag is taken as the
+    ///  clock offset, so source spacing is preserved; sources already on the local clock stay unchanged.
+    /// </summary>
+    private RoadLearningSample AlignClock(RoadLearningSample sample)
+    {
+        double lag = (sample.ReceivedAt - sample.MeasuredAt).TotalSeconds;
+        if (!_clockLags.TryGetValue(sample.Source, out Queue<double>? lags))
+        {
+            _clockLags[sample.Source] = lags = new();
+        }
+
+        lags.Enqueue(lag);
+        while (lags.Count > 40)
+        {
+            lags.Dequeue();
+        }
+
+        double offset = lags.Min();
+        return offset is >= 0 and <= 1 ? sample : sample with { MeasuredAt = sample.MeasuredAt.AddSeconds(offset) };
     }
 
     internal void Observe(RoadLearningSample sample)
@@ -175,18 +292,33 @@ internal sealed class RoadLearningSession
                 return;
             }
 
-            if ((_epoch is { } epoch && epoch != sample.Epoch)
-                || (_lastReceived is { } last && (sample.ReceivedAt < last
-                    || sample.ReceivedAt - last > TimeSpan.FromSeconds(3)))
-                || (_identities.TryGetValue(sample.Source, out var identity)
-                    && identity != (sample.SourceId, sample.Generation)))
+            string? interruption = _epoch is { } epoch && epoch != sample.Epoch ? "Fusion epoch changed."
+                : _lastReceived is { } last && sample.ReceivedAt - last > TimeSpan.FromSeconds(3) ? "No samples for more than 3 seconds."
+                : null;
+            if (interruption is not null)
             {
-                ResetWindow();
+                ResetWindow(interruption);
+            }
+
+            string? sourceInterruption = _lastArrival.TryGetValue(sample.Source, out DateTimeOffset arrival) && sample.ReceivedAt < arrival
+                    ? $"{sample.Source} arrival timestamp moved backwards."
+                : _identities.TryGetValue(sample.Source, out var identity) && identity != (sample.SourceId, sample.Generation)
+                    ? $"{sample.Source} identity or generation changed." : null;
+            if (sourceInterruption is not null)
+            {
+                // A replaced or recovered producer restarts only its own history.
+                ResetSources([sample.Source], sourceInterruption);
             }
 
             _epoch = sample.Epoch;
             _identities[sample.Source] = (sample.SourceId, sample.Generation);
-            _lastReceived = sample.ReceivedAt;
+            _lastArrival[sample.Source] = sample.ReceivedAt;
+            if (_lastReceived is null || sample.ReceivedAt > _lastReceived)
+            {
+                _lastReceived = sample.ReceivedAt;
+            }
+
+            sample = AlignClock(sample);
             if (sample.MeasuredAt > sample.ReceivedAt
                 || sample.ReceivedAt - sample.MeasuredAt > TimeSpan.FromSeconds(2)
                 || new[] { sample.Speed, sample.Rpm, sample.AccelerationMagnitude,
@@ -212,10 +344,13 @@ internal sealed class RoadLearningSession
             }
 
             _lastSample[sample.Source] = sample.MeasuredAt;
-            _startedWindow ??= sample.ReceivedAt;
+            if (_startedWindow is null || sample.ReceivedAt < _startedWindow)
+            {
+                _startedWindow = sample.ReceivedAt;
+            }
             _samples.Enqueue(sample);
             while (_samples.TryPeek(out RoadLearningSample? first)
-                && sample.ReceivedAt - first.ReceivedAt > Window)
+                && _lastReceived - first.ReceivedAt > Window)
             {
                 _samples.Dequeue();
             }
@@ -233,8 +368,7 @@ internal sealed class RoadLearningSession
                 return null;
             }
 
-            RoadLearningSample[] samples = [.. _samples.Where(item => now - item.ReceivedAt <= Window
-                && now >= item.MeasuredAt && now - item.MeasuredAt <= Window)];
+            RoadLearningSample[] samples = CurrentSamples(now);
             if (samples.Length == 0)
             {
                 return null;
@@ -272,6 +406,11 @@ internal sealed class RoadLearningSession
         }
     }
 
+    private RoadLearningSample[] CurrentSamples(DateTimeOffset now)
+        => [.. _samples.Where(item => now >= item.ReceivedAt && now - item.ReceivedAt <= Window
+            && now >= item.MeasuredAt && now - item.MeasuredAt <= Window)
+            .OrderBy(item => item.MeasuredAt)];
+
     private static RoadSourceEvidence[] BuildEvidence(RoadLearningSample[] samples, DateTimeOffset now)
         => [.. Enum.GetValues<LearningSource>().Select(source =>
         {
@@ -299,7 +438,7 @@ internal sealed class RoadLearningSession
     private static double? Derivative(RoadLearningSample[] recent)
     {
         RoadLearningSample[] speeds = [.. recent.Where(item => item.Speed is not null)];
-        if (speeds.Length < 4 || (speeds[^1].MeasuredAt - speeds[0].MeasuredAt).TotalSeconds < 1)
+        if (speeds.Length < 3 || (speeds[^1].MeasuredAt - speeds[0].MeasuredAt).TotalSeconds < 1)
         {
             return null;
         }
@@ -326,6 +465,12 @@ internal sealed class RoadLearningSession
         return Math.Sqrt(values.Average(value => (value - mean) * (value - mean)));
     }
 
+    private static bool SpeedSourcesConflict(RoadSourceEvidence gps, RoadSourceEvidence vehicle)
+        => gps.Speed is { } gpsSpeed && vehicle.Speed is { } vehicleSpeed
+            && (Math.Abs(gpsSpeed - vehicleSpeed) > 3
+                || (gps.Acceleration is { } gpsAcceleration && vehicle.Acceleration is { } vehicleAcceleration
+                    && Math.Abs(gpsAcceleration - vehicleAcceleration) > 1.5));
+
     private static (RoadCondition Condition, int Level, int Confidence)? Recognize(
         RoadLearningSample[] samples, RoadSourceEvidence[] sources, DateTimeOffset now)
     {
@@ -341,10 +486,7 @@ internal sealed class RoadLearningSession
             return null;
         }
 
-        if (gps.Speed is { } gpsSpeed && vehicle.Speed is { } vehicleSpeed
-            && (Math.Abs(gpsSpeed - vehicleSpeed) > 3
-                || (gps.Acceleration is { } gpsAcceleration && vehicle.Acceleration is { } vehicleAcceleration
-                    && Math.Abs(gpsAcceleration - vehicleAcceleration) > 1.5)))
+        if (SpeedSourcesConflict(gps, vehicle))
         {
             return null;
         }
@@ -352,11 +494,16 @@ internal sealed class RoadLearningSession
         RoadWindow w = new(samples, speedSource, now);
         RoadLearningSample[] recent = [.. w.Speeds.Where(item => now - item.MeasuredAt <= TimeSpan.FromSeconds(8))];
         double? earlierSpeed = recent.Length > 0 ? recent[0].Speed : null;
-        double? pitch = w.MeanPitch(Window.TotalSeconds - 5, Window.TotalSeconds);
+        double? fusedPitch = w.MeanPitch(Window.TotalSeconds - 5, Window.TotalSeconds);
+        // Fusion support lapses between quiet stops; fall back to damped GPS altitude grade and course-rate lateral.
+        double? pitch = fusedPitch ?? w.AltitudeGrade(Window.TotalSeconds - 12, Window.TotalSeconds);
+        bool pitchFromAltitude = fusedPitch is null && pitch is not null;
         RoadLearningSample? lastImu = samples.LastOrDefault(item => item.Source == LearningSource.Internal
             && now - item.MeasuredAt <= TimeSpan.FromSeconds(2));
-        double? lateral = lastImu?.SupportedLateralAcceleration;
+        double? lateral = lastImu?.SupportedLateralAcceleration ?? w.CourseLateral(3);
+        bool lateralFromCourse = lastImu?.SupportedLateralAcceleration is null && lateral is not null;
         StopInterval? last = w.Stops.LastOrDefault();
+        double standstillSpeed = w.StandstillDamping > 1 && w.CurrentStandstillSpeed is { } damped ? damped : speed.Value;
         RoadCondition? condition = null;
         int level = 0;
         bool semantic = false, usesPitch = false, usesLateral = false, usesLongitudinal = false;
@@ -385,7 +532,7 @@ internal sealed class RoadLearningSession
             condition = RoadCondition.StopAndGo;
             semantic = true;
         }
-        else if (speed < 0.6 && earlierSpeed > 2)
+        else if (standstillSpeed < w.StandstillThreshold && earlierSpeed > 2)
         {
             double decel = w.PeakDeceleration(8);
             if (pitch is { } p && p >= 2)
@@ -421,7 +568,7 @@ internal sealed class RoadLearningSession
 
             usesPitch = pitch is not null;
         }
-        else if (last is { End: null } stopped && speed < 0.6)
+        else if (last is { End: null } stopped && standstillSpeed < w.StandstillThreshold)
         {
             double duration = w.LastT - stopped.Start;
             if (stopped.Approach > 2 && duration >= 12)
@@ -482,7 +629,8 @@ internal sealed class RoadLearningSession
             }
         }
 
-        if (condition is null && speed > 3 && pitch is { } late && w.MeanPitch(0, 10) is { } early)
+        if (condition is null && speed > 3 && pitch is { } late
+            && (pitchFromAltitude ? w.AltitudeGrade(0, 12) : w.MeanPitch(0, 10)) is { } early)
         {
             if (Math.Abs(early) < 1.5 && late >= 2.5)
             {
@@ -542,28 +690,43 @@ internal sealed class RoadLearningSession
             return null;
         }
 
+        bool usesAltitude = usesPitch && pitchFromAltitude;
+        if (usesAltitude)
+        {
+            usesPitch = false;
+        }
+
+        if (usesLateral && lateralFromCourse)
+        {
+            usesLateral = false;
+            usesCourse = true;
+        }
+
         bool usesImu = usesVibration || usesLateral || usesPitch || usesLongitudinal;
         sources[(int)speedSource] = speedEvidence with
         {
             Contribution = usesImu ? 1 : 2,
             Explanation = "Measured speed and source-time speed slope; not fused speed."
+                + (w.StandstillDamping > 1 ? $" Standstill found with {w.StandstillDamping}-second median damping." : "")
         };
-        if (speedSource == LearningSource.Vehicle && (usesCourse
+        if (speedSource == LearningSource.Vehicle && (usesCourse || usesAltitude
             || (gps.Acceleration is { } ga && vehicle.Acceleration is { } va && Math.Abs(ga - va) < 0.5)))
         {
             sources[(int)LearningSource.Gps] = gps with
             {
-                Contribution = 1,
-                Explanation = usesCourse ? "GPS course change/reversal over the window."
+                Contribution = usesAltitude ? 2 : 1,
+                Explanation = usesAltitude ? "Damped GPS altitude-versus-distance grade (fusion pitch unsupported)."
+                    : usesCourse ? "GPS course change/reversal over the window."
                     : "GPS speed slope agrees with vehicle speed slope (correlated evidence)."
             };
         }
-        else if (usesCourse)
+        else if (usesCourse || usesAltitude)
         {
             sources[(int)LearningSource.Gps] = sources[(int)LearningSource.Gps] with
             {
                 Contribution = 3,
-                Explanation = "GPS speed plus GPS course change/reversal over the window."
+                Explanation = usesAltitude ? "GPS speed plus damped altitude-versus-distance grade."
+                    : "GPS speed plus GPS course change/reversal over the window."
             };
         }
 
@@ -620,32 +783,80 @@ internal sealed class RoadLearningSession
                 .OrderBy(group => group.Key)
                 .Select(group => (T: T(group.Last()), V: group.Last().Speed!.Value))];
             MaxSpeed = SpeedBins.Length > 0 ? SpeedBins.Max(bin => bin.V) : 0;
-            bool stopped = false;
-            double approach = 0;
-            foreach ((double t, double v) in SpeedBins)
+            // Receiver speed jitters near zero; escalate damping until a clean standstill emerges.
+            foreach ((int width, double enter, double exit) in StandstillDampingLevels)
             {
-                if (!stopped)
+                (double T, double V)[] bins = width == 1 ? SpeedBins : Median(SpeedBins, width);
+                List<StopInterval> stops = DetectStops(bins, enter, exit);
+                StandstillDamping = width;
+                StandstillThreshold = enter;
+                CurrentStandstillSpeed = bins.Length > 0 ? bins[^1].V : null;
+                Stops = stops;
+                if (bins.Length == 0 || bins.Min(bin => bin.V) >= NearStandstillSpeed || stops.Count > 0)
                 {
-                    approach = Math.Max(approach, v);
-                    if (v < 0.6)
-                    {
-                        stopped = true;
-                        Stops.Add(new(t, null, approach));
-                        approach = 0;
-                    }
-                }
-                else if (v > 1.0)
-                {
-                    stopped = false;
-                    Stops[^1] = Stops[^1] with { End = t };
-                    approach = v;
+                    break;
                 }
             }
         }
 
+        /// <summary>
+        ///  Median width with stop enter/exit speeds. Escalation runs only while no standstill is found at all,
+        ///  so later levels tolerate a receiver whose standstill speed never reads below the raw stop speed.
+        /// </summary>
+        internal static readonly (int Width, double Enter, double Exit)[] StandstillDampingLevels =
+            [(1, 0.6, 1.0), (3, 1.0, 1.4), (5, 1.0, 1.4)];
+        private const double NearStandstillSpeed = 1.5;
+
+        private static (double T, double V)[] Median((double T, double V)[] bins, int width)
+        {
+            // Full-width windows shifted inward at the edges, so the newest bin is not biased by a half window.
+            width = Math.Min(width, bins.Length);
+            return [.. bins.Select((bin, index) =>
+            {
+                int first = Math.Clamp(index - width / 2, 0, bins.Length - width);
+                double[] neighbourhood = [.. bins[first..(first + width)].Select(item => item.V).Order()];
+                return (bin.T, neighbourhood[neighbourhood.Length / 2]);
+            })];
+        }
+
+        private static List<StopInterval> DetectStops((double T, double V)[] bins, double enter, double exit)
+        {
+            List<StopInterval> stops = [];
+            bool stopped = false;
+            double approach = 0;
+            foreach ((double t, double v) in bins)
+            {
+                if (!stopped)
+                {
+                    approach = Math.Max(approach, v);
+                    if (v < enter)
+                    {
+                        stopped = true;
+                        stops.Add(new(t, null, approach));
+                        approach = 0;
+                    }
+                }
+                else if (v > exit)
+                {
+                    stopped = false;
+                    stops[^1] = stops[^1] with { End = t };
+                    approach = v;
+                }
+            }
+
+            return stops;
+        }
+
+        /// <summary>Median width (1 = raw) needed to reveal a standstill in noisy speed.</summary>
+        internal int StandstillDamping { get; private set; } = 1;
+        /// <summary>Speed below which the (damped) vehicle counts as stopped.</summary>
+        internal double StandstillThreshold { get; private set; } = 0.6;
+        /// <summary>The latest speed after standstill damping.</summary>
+        internal double? CurrentStandstillSpeed { get; private set; }
+
         internal RoadLearningSample[] Speeds { get; }
         internal (double T, double V)[] SpeedBins { get; }
-        internal List<StopInterval> Stops { get; } = [];
+        internal List<StopInterval> Stops { get; private set; } = [];
         internal double MaxSpeed { get; }
         internal double LastT { get; }
 
@@ -694,6 +905,59 @@ internal sealed class RoadLearningSession
                 .Select(item => item.GpsCourseDegrees!.Value)];
             return courses.Length < 2 ? null
                 : courses.Zip(courses.Skip(1)).Sum(pair => WrapDegrees(pair.Second - pair.First));
+        }
+
+        /// <summary>Centripetal acceleration (m/s², right positive) from GPS course rate and speed.</summary>
+        internal double? CourseLateral(double seconds)
+        {
+            RoadLearningSample[] gps = [.. _samples.Where(item => item.Source == LearningSource.Gps
+                && item.GpsCourseDegrees is not null && item.Speed > 2 && T(item) >= LastT - seconds)];
+            if (gps.Length < 2)
+            {
+                return null;
+            }
+
+            double dt = T(gps[^1]) - T(gps[0]);
+            if (dt < 1)
+            {
+                return null;
+            }
+
+            double turn = gps.Zip(gps.Skip(1)).Sum(pair => WrapDegrees(pair.Second.GpsCourseDegrees!.Value - pair.First.GpsCourseDegrees!.Value));
+            return turn / dt * Math.PI / 180 * gps.Average(item => item.Speed!.Value);
+        }
+
+        /// <summary>
+        ///  Road grade in degrees from GPS altitude against travelled distance. The regression over many
+        ///  seconds is deliberate damping: single altitude fixes are far too noisy for grade.
+        /// </summary>
+        internal double? AltitudeGrade(double from, double to)
+        {
+            RoadLearningSample[] gps = [.. _samples.Where(item => item.Source == LearningSource.Gps
+                && item.GpsAltitudeMeters is not null && item.Speed is not null && T(item) >= from && T(item) <= to)];
+            if (gps.Length < 5)
+            {
+                return null;
+            }
+
+            double[] distance = new double[gps.Length];
+            for (int index = 1; index < gps.Length; index++)
+            {
+                double dt = T(gps[index]) - T(gps[index - 1]);
+                distance[index] = distance[index - 1] + dt * (gps[index].Speed!.Value + gps[index - 1].Speed!.Value) / 2;
+            }
+
+            if (distance[^1] < 50)
+            {
+                return null;
+            }
+
+            double meanDistance = distance.Average();
+            double meanAltitude = gps.Average(item => item.GpsAltitudeMeters!.Value);
+            double denominator = distance.Sum(d => (d - meanDistance) * (d - meanDistance));
+            double slope = distance.Zip(gps).Sum(pair => (pair.First - meanDistance)
+                * (pair.Second.GpsAltitudeMeters!.Value - meanAltitude)) / denominator;
+            return Math.Atan(slope) * 180 / Math.PI;
         }
 
         /// <summary>Speed magnitude rising while the vehicle-frame longitudinal acceleration is negative (or vice versa).</summary>

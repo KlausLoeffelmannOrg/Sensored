@@ -372,8 +372,16 @@ namespace Sensored
             }
             catch (Exception exception)
             {
+                if (_automation is { } automation)
+                {
+                    automation.ReportFailure("Could not start GPS preview", exception);
+                    return;
+                }
+
                 ShowError("Could not start GPS preview", exception);
             }
+
+            await StartAutomationAsync().ConfigureAwait(true);
         }
 
         /// <inheritdoc/>
@@ -414,6 +422,7 @@ namespace Sensored
         /// <inheritdoc/>
         protected override void OnFormClosed(FormClosedEventArgs e)
         {
+            _automation?.Dispose();
             SetShutdownStage("settings", "Saving window placement and settings.");
             _fullScreenController.ExitFullScreen();
             PersistWindowPlacement();
@@ -668,7 +677,8 @@ namespace Sensored
 
         private async Task StartSensorSessionAsync(
             string? replayPath = null,
-            FusionContinuity fusionContinuity = FusionContinuity.Reset)
+            FusionContinuity fusionContinuity = FusionContinuity.Reset,
+            bool allowReceiverWrites = true)
         {
             if (_terminalSourceStopFailure is { } terminalFailure)
             {
@@ -711,7 +721,8 @@ namespace Sensored
                     _replayStopStage = 0;
                     if (_sensorSourceFactory is { } factory)
                     {
-                        await factory.ConfigureAsync(_options.CreateWindowsSourceOptions(), allowReceiverWrites: true)
+                        await factory.ConfigureAsync(_options.CreateWindowsSourceOptions(),
+                            allowReceiverWrites: allowReceiverWrites && _automation is null)
                             .ConfigureAwait(true);
                     }
                 }
@@ -1807,6 +1818,12 @@ namespace Sensored
             _log.Error(operation, exception, diagnosticContext);
             UpdateTelemetryStatus();
             SetStatus($"{operation}: {exception.Message}");
+            if (_automation is { } automation)
+            {
+                automation.RecordError(operation, exception);
+                return;
+            }
+
             MessageBox.Show(
                 this,
                 BuildErrorMessage(operation, exception, diagnosticContext),
