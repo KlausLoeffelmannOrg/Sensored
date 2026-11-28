@@ -1091,6 +1091,7 @@ public sealed class FusionSetupAppTests
     [Theory]
     [InlineData(ObdAdapterKind.ObdLinkCx)]
     [InlineData(ObdAdapterKind.Ad20)]
+    [InlineData(ObdAdapterKind.BlueDriver)]
     public async Task AdapterOptionsRoundTripThroughBothEditorsAndPersistAcrossRestart(ObdAdapterKind adapter)
         => await RunStaAsync(() =>
         {
@@ -1104,7 +1105,7 @@ public sealed class FusionSetupAppTests
                 {
                     ComboBox selector = Field<ComboBox>(dialog, "_obdAdapterComboBox");
                     Assert.Equal(ObdAdapterKind.ObdLinkCx, selector.SelectedItem);
-                    Assert.Equal(2, selector.Items.Count);
+                    Assert.Equal(Enum.GetValues<ObdAdapterKind>().Length, selector.Items.Count);
                     selector.SelectedItem = adapter;
                     Assert.Equal(ObdAdapters.GetName(adapter), selector.GetItemText(selector.SelectedItem));
                     Invoke(dialog, "OnAcceptClick", null!, EventArgs.Empty);

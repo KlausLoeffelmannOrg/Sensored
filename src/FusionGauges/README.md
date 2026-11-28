@@ -18,6 +18,143 @@ The root `Sensored.Dev.slnx` groups source ProjectReferences under `WARP`.
 Use `Sensored.slnx` (or `.\build.cmd` without `-mode project`) for WARP NuGet
 dependencies instead. Both solutions include Sensored and both app test suites.
 
+## Investigating additional OBD adapters
+
+`ObdAdapterProbe` is a Windows console harness using WARP's Bluetooth discovery
+and service inspection. It does not alter the supported-adapter catalog.
+Configure and run it only while parked, with other adapter apps closed:
+
+```powershell
+dotnet run --project src\FusionGauges\ObdAdapterProbe -p:UsePackageDependency=false -- list
+dotnet run --project src\FusionGauges\ObdAdapterProbe -p:UsePackageDependency=false -- inspect "BlueDriver-E1D8"
+```
+
+`list` enumerates paired devices; name selection requires an exact, unambiguous
+paired name. A BLE address from `list` can replace the name and bypass discovery.
+`inspect` reads uncached service metadata and prints JSON; it sends no adapter
+commands. Redirect stdout to a local file to retain the profile. Diagnostics go
+to stderr. Output includes Bluetooth identifiers; review before sharing.
+Discovery/inspection has a 60-second budget; Ctrl+C cancels it. Windows discovery
+can stall, so use a BLE address if name discovery times out.
+
+For **confirmed diagnostic UART endpoints only**, `probe <name-or-BLE-address>
+<service-uuid> <write-uuid> <notify-uuid>` connects and sends just `ATI\r`, logging
+received bytes as hex. Do not guess endpoints from writable/notifiable properties:
+firmware, mode, and flow-control characteristics can have the same properties.
+The probe requires an ASCII ELM327/STN/OBDLink identity terminated by `>`, with a
+five-second response budget and bounded buffer. Missing/binary/rejected responses
+exit nonzero. Even a successful identity probe does **not** verify vehicle
+telemetry, and does not add a model to WARP's supported list. It never resets the
+adapter, clears codes, requests CAN monitoring, or changes bus mode.
+
+### BlueDriver live investigation (2026-11-27)
+
+The paired `BlueDriver-E1D8` was reachable over BLE on this machine. Its
+communication endpoints match the documented **Silicon Labs BGX Xpress Streaming
+Service**, not OBDLink CX's UART:
+
+| Purpose | UUID |
+| --- | --- |
+| BGX streaming service | `331a36f5-2459-45ea-9d95-6142f0c4b307` |
+| Peripheral Rx: application writes | `a9da6040-0823-4995-94ec-9ce41ca28833` |
+| Peripheral Tx: application receives | `a73e9a10-628f-4494-a099-12efaf72258f` |
+| Bus mode: read only in this harness | `75a9f022-af03-4e41-b4bc-9de90a47d50b` |
+
+WARP's generic classifier selected Peripheral Rx for both writes and notifications.
+For BGX, Rx notifications are **flow-control messages**, not received serial data.
+The harness therefore enforces the documented Rx/Tx pair and uses a BGX-specific
+probe: read mode and require `01` (Streaming), subscribe to Peripheral Tx only,
+and use acknowledged writes to Peripheral Rx (legacy flow control).
+It neither subscribes to Rx flow control nor writes Mode. The other vendor
+service, `169b52a0-b7fd-40da-998c-dd9238327e55`, was left untouched.
+
+The live probe read mode `01`, established the BGX connection, and sent `ATI\r`.
+Peripheral Tx returned **`19 0D 3E`** (control byte `0x19`, CR, `>`), which the
+ELM identity parser rejected. This proves BLE reachability and a response on the
+documented serial bridge, **not** ELM compatibility or usable OBD vehicle data.
+The result was reproduced on a second run (2026-11-27 16:14 PST, exit code 1):
+
+```text
+> ObdAdapterProbe probe <BlueDriver BLE address> 331a36f5-2459-45ea-9d95-6142f0c4b307 a9da6040-0823-4995-94ec-9ce41ca28833 a73e9a10-628f-4494-a099-12efaf72258f
+Opening BLE address directly; bypassing device discovery.
+Inspecting BlueDriver-E1D8 (LowEnergy); no adapter commands sent.
+TransportVerdict describes byte transport, NOT OBD protocol compatibility.
+Explicit ELM identity probe: 331a36f5-... / a9da6040-... / a73e9a10-...
+BGX bus mode HEX: 01
+BGX connected; legacy flow control (Rx notifications disabled). TX ASCII: ATI\r
+RX HEX: 190D3E
+FormatException: Non-ASCII response; ELM compatibility is not established.
+```
+
+The observed flashing blue LED is consistent with BlueDriver's documented
+communication indicator; it is not a telemetry-success indicator.
+
+#### Decoded protocol (community reverse engineering, verified live)
+
+The community analysis
+[sjalkote/bluedriver-reverse-engineering](https://github.com/sjalkote/bluedriver-reverse-engineering)
+(iOS HCI capture; no license, so the harness is an independent re-implementation
+and copies no code) explains `0x19`: every payload byte is XORed with `0x26`
+except CR (`0x0D`) and `>` (`0x3E`). `19 0D 3E` decodes to `?\r>`, the firmware
+rejecting `ATI` as unknown. The protocol:
+
+- Subscribe to CMD (Peripheral Rx), DATA (Peripheral Tx) and STATUS (Mode); the
+  device sends `00 FF 07` on CMD and `01 01 00` acknowledgements per command.
+- Write `00 FF 7F` to DATA to open a 255-byte receive credit window, then ACK
+  every DATA fragment with `01 <len> 00`.
+- Send XOR-encoded ASCII commands terminated by CR to CMD; responses end with `>`.
+- Proprietary init (BGX13P overlay, not the ELM core): `LMI` (first answers `?`),
+  `LMD`, `LML0`, `LMI`, `LMD`, `LMDP` (OBD protocol number), `LMI`, `LMX1`,
+  `LMX0` (fast timing). Then raw mode 01 PIDs work with headers off, data bytes
+  only. Standard AT commands after the init reportedly break the firmware state;
+  `ATRV`/`ATDP` return `NO DATA`.
+
+`ObdAdapterProbe bluedriver <name-or-BLE-address>` sends only `LMI`;
+`--live` adds the init sequence and two rounds of read-only requests for the
+three support bitmaps and all ten WARP PIDs. First live result on the GLE, parked
+(2026-11-27 16:21 PST, exit 0, then still only `010D`/`010C`/`0105`/`0142`):
+
+| Item | Raw | Decoded |
+| --- | --- | --- |
+| `LMI` | `OSAPI v2.60 OK` | firmware identity |
+| `LMDP` | `6` | ISO 15765-4 CAN 11-bit 500 kbps |
+| `010D` | `00` | 0 km/h |
+| `010C` | `00 00` | 0 rpm |
+| `0105` | `5D` | 53 °C coolant |
+| `0142` | `39 CC` / `39 C5` | 14.796 / 14.789 V |
+
+**Conclusion (investigation):** BlueDriver *can* deliver standard OBD mode 01
+telemetry, but not through WARP's ELM path: `ObdLinkSession` initializes with
+`ATI`/`ATE0`/`ATL0`/`ATS1`/`ATH1`/`ATCAF1`/`ATTP0`, speed-only needs
+`ATCRA`/`ATAT1`/`ATST0A`, and CAN diagnostics need `ATMA`/`STM`. None of these
+are valid after BlueDriver's LM init. The protocol is unofficial and may change
+with firmware.
+
+A run over all WARP PIDs also showed that the header-less support bitmaps
+(`0100` → `98 18 00 01`) describe only one ECU: `0111` and `012F` answered
+although not advertised.
+
+#### WARP integration
+
+WARP's `feature/bluedriver-obd-adapter` branch adds `ObdAdapterKind.BlueDriver`
+(shown as **BlueDriver** in both options editors), a `BlueDriverBluetoothTransport`
+(XOR + credit ACKs over BGX) and a mode-01-only session path: LM init, no AT/ST
+commands, every PID probed once instead of trusting bitmaps, plain `010D` in
+speed-only mode, and Mercedes/CAN capture refused with an `INFO` entry. Live on
+the GLE while driving (2026-11-27 16:31 PST), through `ObdLinkConnection`:
+speed 44 km/h, 1390 rpm, throttle and 98 °C coolant valid; speed-only polling
+≈16.3 Hz (55–80 ms per request) over 45 s. Windows may deny GATT access for a
+few seconds right after a previous session released the adapter; the normal
+retry recovers. See WARP's `Devices/ObdLink/README.md` for details.
+
+Sources:
+[Silicon Labs BGX BLE services and legacy flow control](https://docs.silabs.com/gecko-os/1/bgx/1.1/ble-services),
+[BlueDriver's supported mobile platforms](https://support.bluedriver.com/en/articles/15108459-is-my-phone-or-tablet-compatible),
+[BlueDriver LED meanings](https://support.bluedriver.com/en/articles/15108475-understanding-led-colors).
+The third-party [Skanyx compatibility assessment](https://skanyx.com/scanner-compatibility/bluedriver)
+also reports no documented/supported third-party app integration; BlueDriver
+publishes no vendor protocol specification.
+
 ## Using the cockpit
 
 New recordings always include `Filename.RawV2.csv`, `Filename.FuseV2.csv` and a

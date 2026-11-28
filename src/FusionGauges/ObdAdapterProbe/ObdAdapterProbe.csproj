@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net11.0-windows10.0.22000.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="FusionGauges.Tests" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(UsePackageDependency)' == 'false'">
+    <ProjectReference Include="$(WarpRoot)src\WarpToolkit.Windows.Bluetooth\WarpToolkit.Windows.Bluetooth.csproj" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(UsePackageDependency)' == 'true'">
+    <PackageReference Include="WarpToolkit.Windows.Bluetooth" Version="$(WarpPackageVersion)" />
+  </ItemGroup>
+</Project>

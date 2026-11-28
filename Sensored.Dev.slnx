@@ -4,6 +4,7 @@
     <Project Path="src\Sensored\WarpSensorsDataProcessor\WarpSensorsDataProcessor.csproj" />
   </Folder>
   <Folder Name="/App/FusionGauges/">
+    <Project Path="src\FusionGauges\ObdAdapterProbe\ObdAdapterProbe.csproj" />
     <Project Path="src\FusionGauges\WinFormsFusionGauges.WinFormsApp\WinFormsFusionGauges.WinFormsApp.csproj" />
   </Folder>
   <Folder Name="/App/Tests/">
